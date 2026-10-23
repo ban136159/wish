@@ -1,9 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// 《雾钟》2D 主角摄像机跟随。
-/// 适用于 XY 平面上的 SpriteRenderer / Rigidbody2D 主角。
-/// 将此脚本挂到 Main Camera，把 Player 拖到 target。
+/// 《雾钟》2D 摄像机跟随。
+/// 适用于 XY 平面的 SpriteRenderer / Rigidbody2D 主角。
 /// </summary>
 [DisallowMultipleComponent]
 public class WuzhongCameraFollow2D : MonoBehaviour
@@ -11,28 +10,29 @@ public class WuzhongCameraFollow2D : MonoBehaviour
     [Header("跟随目标")]
     [SerializeField] private Transform target;
 
-    [Header("构图")]
-    [Tooltip("Z 通常为 -10；X/Y 可微调主角在画面中的位置。")]
-    [SerializeField] private Vector3 offset = new Vector3(0f, 0.8f, -10f);
+    [Header("跟随设置")]
+    [Tooltip("先设为 (0, 0, -10)，确认主角可见后再微调。")]
+    [SerializeField] private Vector3 offset = new Vector3(0f, 0f, -10f);
 
-    [Tooltip("数值越小，跟随越紧；建议 0.12 - 0.25。")]
+    [Tooltip("勾选后摄像机直接跟随，排查位置问题时建议开启。")]
+    [SerializeField] private bool snapToTarget = true;
+
     [Min(0.01f)]
-    [SerializeField] private float smoothTime = 0.18f;
+    [SerializeField] private float smoothTime = 0.12f;
 
-    [Tooltip("主角前方预留视野。设置为 0 可关闭。")]
-    [SerializeField] private float lookAheadDistance = 0.6f;
-
-    [Tooltip("速度多大时启用前方视野。")]
+    [Header("可选：移动方向预留视野")]
+    [SerializeField] private bool enableLookAhead;
+    [SerializeField] private float lookAheadDistance = 0.4f;
     [SerializeField] private float lookAheadSpeedThreshold = 0.1f;
 
-    [Header("边界（可选）")]
+    [Header("可选：地图边界")]
     [SerializeField] private bool useBounds;
     [SerializeField] private Vector2 minBounds = new Vector2(-20f, -20f);
     [SerializeField] private Vector2 maxBounds = new Vector2(20f, 20f);
 
     private Vector3 smoothVelocity;
     private Rigidbody2D targetBody;
-    private Vector2 lastMoveDirection = Vector2.down;
+    private Vector2 lastMoveDirection = Vector2.zero;
 
     public Transform Target
     {
@@ -41,17 +41,20 @@ public class WuzhongCameraFollow2D : MonoBehaviour
         {
             target = value;
             CacheTargetBody();
+            SnapNow();
         }
     }
 
     private void Awake()
     {
         CacheTargetBody();
+        SnapNow();
     }
 
     private void OnEnable()
     {
         CacheTargetBody();
+        SnapNow();
     }
 
     private void CacheTargetBody()
@@ -59,21 +62,34 @@ public class WuzhongCameraFollow2D : MonoBehaviour
         targetBody = target != null ? target.GetComponent<Rigidbody2D>() : null;
     }
 
+    private void SnapNow()
+    {
+        if (target == null) return;
+
+        Vector3 desired = target.position + offset;
+        desired.z = offset.z;
+        transform.position = desired;
+        smoothVelocity = Vector3.zero;
+    }
+
     private void LateUpdate()
     {
         if (target == null) return;
 
-        // 使用 velocity 以兼容较旧版本的 Unity。
-        Vector2 velocity = targetBody != null ? targetBody.velocity : Vector2.zero;
-        if (velocity.sqrMagnitude > lookAheadSpeedThreshold * lookAheadSpeedThreshold)
-            lastMoveDirection = velocity.normalized;
+        Vector3 desired = target.position + offset;
 
-        Vector3 lookAhead = velocity.magnitude >= lookAheadSpeedThreshold
-            ? (Vector3)(lastMoveDirection * lookAheadDistance)
-            : Vector3.zero;
+        if (enableLookAhead)
+        {
+            Vector2 velocity = targetBody != null ? targetBody.velocity : Vector2.zero;
+            if (velocity.sqrMagnitude > lookAheadSpeedThreshold * lookAheadSpeedThreshold)
+                lastMoveDirection = velocity.normalized;
 
-        Vector3 desired = target.position + offset + lookAhead;
-        desired.z = offset.z;
+            if (velocity.magnitude >= lookAheadSpeedThreshold)
+                desired += (Vector3)(lastMoveDirection * lookAheadDistance);
+        }
+
+        // 明确保持摄像机位于主角后方，避免 Z 值意外导致主角被裁切。
+        desired.z = target.position.z + offset.z;
 
         if (useBounds)
         {
@@ -81,8 +97,15 @@ public class WuzhongCameraFollow2D : MonoBehaviour
             desired.y = Mathf.Clamp(desired.y, minBounds.y, maxBounds.y);
         }
 
-        transform.position = Vector3.SmoothDamp(
-            transform.position, desired, ref smoothVelocity, smoothTime);
+        if (snapToTarget)
+        {
+            transform.position = desired;
+        }
+        else
+        {
+            transform.position = Vector3.SmoothDamp(
+                transform.position, desired, ref smoothVelocity, smoothTime);
+        }
     }
 
     private void OnValidate()
