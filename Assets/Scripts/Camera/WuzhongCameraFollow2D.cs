@@ -63,7 +63,8 @@ public class WuzhongCameraFollow2D : MonoBehaviour
     {
         if (target == null) return;
 
-        Vector2 velocity = targetBody != null ? targetBody.linearVelocity : Vector2.zero;
+        // 使用 velocity 以兼容较旧版本的 Unity。
+        Vector2 velocity = targetBody != null ? targetBody.velocity : Vector2.zero;
         if (velocity.sqrMagnitude > lookAheadSpeedThreshold * lookAheadSpeedThreshold)
             lastMoveDirection = velocity.normalized;
 
