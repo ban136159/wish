@@ -1,9 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// 《雾钟》俯视角玩家控制器。
-/// 图集切片为 4 列 × 4 行，每帧 48×64 像素；行顺序：下、左、右、上。
-/// 每行第 1 帧站立，其余 3 帧循环播放行走动画。
+/// 《雾钟》单张 PNG 玩家控制器。
+/// 不使用 Sprite Sheet 或逐帧动画；移动时通过上下起伏和轻微倾斜模拟脚步。
+/// 请将单张角色 PNG 导入为 Sprite (2D and UI)，并设置到 SpriteRenderer。
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerController : MonoBehaviour
@@ -11,15 +11,24 @@ public class PlayerController : MonoBehaviour
     [Header("移动")]
     [SerializeField, Min(0f)] private float moveSpeed = 3.5f;
 
-    [Header("动画")]
-    [Tooltip("按图集从上到下、每行从左到右的顺序，设置 16 张切片 Sprite。")]
-    [SerializeField] private Sprite[] characterFrames = new Sprite[16];
-    [SerializeField, Min(1f)] private float animationFps = 8f;
+    [Header("单图晃动效果")]
+    [Tooltip("移动时上下起伏的幅度（Unity 世界单位）。")]
+    [SerializeField, Min(0f)] private float walkBobAmount = 0.045f;
+    [Tooltip("移动时上下起伏的速度。")]
+    [SerializeField, Min(0f)] private float walkBobSpeed = 12f;
+    [Tooltip("静止时模拟呼吸的幅度。")]
+    [SerializeField, Min(0f)] private float idleBobAmount = 0.008f;
+    [SerializeField, Min(0f)] private float idleBobSpeed = 2f;
+    [Tooltip("移动时角色视觉的最大倾斜角度。")]
+    [SerializeField, Min(0f)] private float tiltAmount = 2f;
 
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;
+    private Transform visualTransform;
     private Vector2 moveInput;
-    private int facingRow = 0; // 0=下，1=左，2=右，3=上
+    private Vector3 visualStartLocalPosition;
+    private Quaternion visualStartLocalRotation;
+    private float walkTime;
 
     private void Awake()
     {
@@ -27,34 +36,19 @@ public class PlayerController : MonoBehaviour
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
 
-        spriteRenderer = GetComponentInChildren<SpriteRenderer>();
-        if (spriteRenderer == null)
-            spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
+        SetupVisual();
 
-        if (characterFrames == null || characterFrames.Length != 16 ||
-            System.Array.Exists(characterFrames, sprite => sprite == null))
+        if (spriteRenderer == null || spriteRenderer.sprite == null)
         {
-            Sprite[] loaded = Resources.LoadAll<Sprite>("Characters/Player/wuzhong_player_atlas");
-            if (loaded.Length == 16)
-            {
-                System.Array.Sort(loaded, (a, b) =>
-                {
-                    int row = b.rect.y.CompareTo(a.rect.y);
-                    return row != 0 ? row : a.rect.x.CompareTo(b.rect.x);
-                });
-                characterFrames = loaded;
-            }
-        }
-
-        if (characterFrames == null || characterFrames.Length != 16 ||
-            System.Array.Exists(characterFrames, sprite => sprite == null))
-        {
-            Debug.LogWarning("PlayerController：请在 Inspector 中按图集顺序拖入 16 张 Sprite。", this);
+            Debug.LogWarning(
+                "PlayerController：请给角色的 SpriteRenderer 指定一张 PNG Sprite。",
+                this);
             enabled = false;
             return;
         }
 
-        ApplyFrame(0);
+        visualStartLocalPosition = visualTransform.localPosition;
+        visualStartLocalRotation = visualTransform.localRotation;
     }
 
     private void Update()
@@ -64,8 +58,7 @@ public class PlayerController : MonoBehaviour
             Input.GetAxisRaw("Vertical")
         ).normalized;
 
-        UpdateFacing();
-        UpdateAnimation();
+        UpdateVisualMotion();
     }
 
     private void FixedUpdate()
@@ -77,28 +70,64 @@ public class PlayerController : MonoBehaviour
 #endif
     }
 
-    private void UpdateFacing()
+    private void SetupVisual()
     {
-        if (moveInput.sqrMagnitude < 0.01f) return;
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 
-        if (Mathf.Abs(moveInput.x) > Mathf.Abs(moveInput.y))
-            facingRow = moveInput.x < 0f ? 1 : 2;
+        // 如果 SpriteRenderer 原本挂在带 Rigidbody2D 的根对象上，
+        // 自动将显示层移动到子对象，避免视觉晃动影响物理移动。
+        if (spriteRenderer != null && spriteRenderer.transform == transform)
+        {
+            SpriteRenderer oldRenderer = spriteRenderer;
+            GameObject visual = new GameObject("PlayerVisual");
+            visual.transform.SetParent(transform, false);
+
+            spriteRenderer = visual.AddComponent<SpriteRenderer>();
+            spriteRenderer.sprite = oldRenderer.sprite;
+            spriteRenderer.color = oldRenderer.color;
+            spriteRenderer.flipX = oldRenderer.flipX;
+            spriteRenderer.flipY = oldRenderer.flipY;
+            spriteRenderer.sharedMaterial = oldRenderer.sharedMaterial;
+            spriteRenderer.sortingLayerID = oldRenderer.sortingLayerID;
+            spriteRenderer.sortingOrder = oldRenderer.sortingOrder;
+            spriteRenderer.drawMode = oldRenderer.drawMode;
+            spriteRenderer.size = oldRenderer.size;
+            spriteRenderer.maskInteraction = oldRenderer.maskInteraction;
+            spriteRenderer.enabled = oldRenderer.enabled;
+
+            Destroy(oldRenderer);
+        }
+        else if (spriteRenderer == null)
+        {
+            GameObject visual = new GameObject("PlayerVisual");
+            visual.transform.SetParent(transform, false);
+            spriteRenderer = visual.AddComponent<SpriteRenderer>();
+        }
+
+        visualTransform = spriteRenderer.transform;
+    }
+
+    private void UpdateVisualMotion()
+    {
+        bool isMoving = moveInput.sqrMagnitude > 0.01f;
+        float bob;
+        float tilt = 0f;
+
+        if (isMoving)
+        {
+            walkTime += Time.deltaTime * walkBobSpeed;
+            bob = Mathf.Abs(Mathf.Sin(walkTime)) * walkBobAmount;
+            tilt = -moveInput.x * tiltAmount;
+        }
         else
-            facingRow = moveInput.y < 0f ? 0 : 3;
-    }
+        {
+            bob = Mathf.Sin(Time.time * idleBobSpeed) * idleBobAmount;
+        }
 
-    private void UpdateAnimation()
-    {
-        int frame = moveInput.sqrMagnitude < 0.01f
-            ? 0
-            : 1 + (Mathf.FloorToInt(Time.time * animationFps) % 3);
+        visualTransform.localPosition = visualStartLocalPosition
+            + Vector3.up * bob;
 
-        ApplyFrame(facingRow * 4 + frame);
-    }
-
-    private void ApplyFrame(int index)
-    {
-        if (index >= 0 && index < characterFrames.Length && characterFrames[index] != null)
-            spriteRenderer.sprite = characterFrames[index];
+        visualTransform.localRotation = visualStartLocalRotation
+            * Quaternion.Euler(0f, 0f, tilt);
     }
 }
