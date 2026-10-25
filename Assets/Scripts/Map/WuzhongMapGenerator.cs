@@ -68,7 +68,13 @@ public class WuzhongMapGenerator : MonoBehaviour
     public bool generateMainRoad = true;
     [Min(1)] public int roadWidth = 3;
     [Range(0f, 1f)] public float secondaryPathChance = 0.15f;
-    [Tooltip("主街水平位置，-1 表示自动放在地图中央。")]
+    [Min(0)] [Tooltip("从主街分出的支路数量。建议 3-6 条，让村中道路形成岔路。")]
+    public int secondaryRoadCount = 4;
+    [Range(0, 4)] [Tooltip("主街弯曲程度。0 为直路，1-2 为自然的轻微弯折，3-4 为明显曲折。")]
+    public int mainRoadWander = 2;
+    [Range(0, 4)] [Tooltip("支路的弯曲程度，数值越大越曲折。")]
+    public int branchRoadWander = 2;
+    [Tooltip("主街大致水平位置，-1 表示自动放在地图中央。道路会围绕此位置自然弯曲。")]
     public int mainRoadCoordinate = -1;
 
     [Header("建筑资源接口")]
@@ -108,9 +114,8 @@ public class WuzhongMapGenerator : MonoBehaviour
         int seed = randomizeSeedEachGeneration ? Environment.TickCount : randomSeed;
         System.Random rng = new System.Random(seed);
 
-        int roadCoord = mainRoadCoordinate < 0
-            ? (generateMainRoad ? mapHeight / 2 : -1000)
-            : Mathf.Clamp(mainRoadCoordinate, 0, mapHeight - 1);
+        // 先构建连续的道路掩码：主街会轻微蜿蜒，支路从主街分叉并延伸到村落各处。
+        bool[,] roadMask = BuildRoadMask(rng);
 
         for (int y = 0; y < mapHeight; y++)
         {
@@ -118,16 +123,11 @@ public class WuzhongMapGenerator : MonoBehaviour
             {
                 TileBase chosen;
                 bool isBorder = x == 0 || y == 0 || x == mapWidth - 1 || y == mapHeight - 1;
-                bool isMainRoad = generateMainRoad &&
-                    Mathf.Abs(y - roadCoord) < Mathf.Max(1, roadWidth) / 2f;
-
-                bool isSecondaryPath = !isMainRoad &&
-                    rng.NextDouble() < secondaryPathChance &&
-                    (x % 7 == 0 || y % 9 == 0);
+                bool isRoad = roadMask[x, y];
 
                 if (isBorder && borderTiles != null && borderTiles.Length > 0)
                     chosen = borderTiles[rng.Next(borderTiles.Length)];
-                else if ((isMainRoad || isSecondaryPath) && roadTiles != null && roadTiles.Length > 0)
+                else if (isRoad && roadTiles != null && roadTiles.Length > 0)
                     chosen = roadTiles[rng.Next(roadTiles.Length)];
                 else
                     chosen = groundTiles[rng.Next(groundTiles.Length)];
@@ -152,6 +152,98 @@ public class WuzhongMapGenerator : MonoBehaviour
             if (Application.isPlaying) Destroy(child);
             else DestroyImmediate(child);
         }
+    }
+
+
+    /// <summary>
+    /// 生成道路网格。道路只在掩码中绘制，保证每条支路都与主街相连，
+    /// 避免旧版随机散落的道路块看起来像噪点。
+    /// </summary>
+    private bool[,] BuildRoadMask(System.Random rng)
+    {
+        bool[,] mask = new bool[mapWidth, mapHeight];
+        if (!generateMainRoad || roadSprites == null || roadSprites.Length == 0)
+            return mask;
+
+        int roadHalf = Mathf.Max(1, roadWidth) / 2;
+        int centerY = mainRoadCoordinate < 0
+            ? mapHeight / 2
+            : Mathf.Clamp(mainRoadCoordinate, 1, mapHeight - 2);
+
+        // 主街从左到右推进；按一定概率缓慢改变高度，形成自然弯路。
+        for (int x = 0; x < mapWidth; x++)
+        {
+            if (mainRoadWander > 0 && x > 0 && rng.NextDouble() < 0.28)
+            {
+                int shift = rng.Next(-mainRoadWander, mainRoadWander + 1);
+                centerY = Mathf.Clamp(centerY + shift, roadHalf + 1, mapHeight - roadHalf - 2);
+            }
+            CarveRoadColumn(mask, x, centerY, roadHalf);
+        }
+
+        // 支路从主街随机位置出发，向地图上方或下方蜿蜒延伸。
+        int actualBranches = Mathf.Min(secondaryRoadCount, Mathf.Max(1, mapWidth / 5));
+        for (int branch = 0; branch < actualBranches; branch++)
+        {
+            int x = rng.Next(3, Mathf.Max(4, mapWidth - 3));
+            int y = FindRoadY(mask, x, rng);
+            int direction = (branch % 2 == 0) ? 1 : -1;
+            if (rng.NextDouble() < 0.25) direction *= -1;
+            int branchHalf = Mathf.Max(0, (Mathf.Max(1, roadWidth) - 1) / 2);
+
+            int safety = mapHeight + mapWidth;
+            while (y > 1 && y < mapHeight - 2 && safety-- > 0)
+            {
+                CarveRoadColumn(mask, x, y, branchHalf);
+
+                // 每走几格向左右拐一格，避免支路变成笔直的竖线。
+                if (branchRoadWander > 0 && rng.NextDouble() < 0.42)
+                {
+                    int turn = rng.Next(-branchRoadWander, branchRoadWander + 1);
+                    x = Mathf.Clamp(x + turn, 1, mapWidth - 2);
+                }
+
+                y += direction;
+            }
+            CarveRoadColumn(mask, x, Mathf.Clamp(y, 1, mapHeight - 2), branchHalf);
+        }
+
+        // 少量横向连接巷道，增加村落道路的环路和岔口。
+        if (secondaryPathChance > 0f && mapHeight > 12)
+        {
+            int connectors = Mathf.RoundToInt(secondaryPathChance * 4f);
+            for (int i = 0; i < connectors; i++)
+            {
+                int y = rng.Next(3, mapHeight - 3);
+                int startX = rng.Next(1, Mathf.Max(2, mapWidth / 3));
+                int endX = rng.Next(Mathf.Max(startX + 1, mapWidth * 2 / 3), mapWidth - 1);
+                int x = startX;
+                while (x <= endX)
+                {
+                    CarveRoadColumn(mask, x, y, 0);
+                    if (branchRoadWander > 0 && rng.NextDouble() < 0.18)
+                        y = Mathf.Clamp(y + rng.Next(-1, 2), 1, mapHeight - 2);
+                    x++;
+                }
+            }
+        }
+
+        return mask;
+    }
+
+    private void CarveRoadColumn(bool[,] mask, int x, int centerY, int halfWidth)
+    {
+        if (x < 0 || x >= mapWidth) return;
+        for (int y = Mathf.Max(1, centerY - halfWidth); y <= Mathf.Min(mapHeight - 2, centerY + halfWidth); y++)
+            mask[x, y] = true;
+    }
+
+    private int FindRoadY(bool[,] mask, int x, System.Random rng)
+    {
+        List<int> candidates = new List<int>();
+        for (int y = 1; y < mapHeight - 1; y++)
+            if (mask[x, y]) candidates.Add(y);
+        return candidates.Count > 0 ? candidates[rng.Next(candidates.Count)] : mapHeight / 2;
     }
 
     private void SpawnObjects(List<SpawnEntry> entries, int count, System.Random rng, string groupName)
