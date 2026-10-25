@@ -1,9 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// 《雾钟》主角控制器。
-/// 支持 WASD / 方向键四方向移动、四方向静态角色图片，以及待机呼吸和移动微动。
-/// 适用于 Unity 2022.3 的 Rigidbody2D。
+/// 《雾钟》主角控制器：四方向移动、方向图片切换、待机呼吸和移动上下微动。
+/// 角色图片直接放在 Player 根物体上也可以；脚本会自动创建 Visual 子物体来承载图片动画。
+/// 适用于 Unity 2022.3 及更新版本。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
@@ -13,29 +13,25 @@ public class PlayerController : MonoBehaviour
     [SerializeField, Min(0f)] private float moveSpeed = 3.5f;
 
     [Header("四方向角色图片（可选）")]
-    [Tooltip("角色朝下、面向镜头时使用的图片。")]
     [SerializeField] private Sprite downSprite;
-    [Tooltip("角色朝上、背对镜头时使用的图片。")]
     [SerializeField] private Sprite upSprite;
-    [Tooltip("角色朝左时使用的图片。")]
     [SerializeField] private Sprite leftSprite;
-    [Tooltip("角色朝右时使用的图片。")]
     [SerializeField] private Sprite rightSprite;
 
-    [Header("角色微动动画")]
-    [Tooltip("建议把角色图片放在 Player 的子物体上，再将该子物体拖到这里。留空时会自动寻找子物体 SpriteRenderer。")]
-    [SerializeField] private Transform visualRoot;
-    [Tooltip("待机呼吸幅度。0.025 代表约 2.5% 的缩放变化。")]
+    [Header("待机呼吸")]
+    [Tooltip("待机时轻微缩放幅度。设为 0 可关闭。")]
     [SerializeField, Range(0f, 0.08f)] private float idleBreathAmount = 0.025f;
-    [Tooltip("待机呼吸速度。")]
     [SerializeField, Min(0f)] private float idleBreathSpeed = 2.2f;
-    [Tooltip("移动时角色图片上下微动的高度（Unity 单位）。")]
-    [SerializeField, Range(0f, 0.12f)] private float moveBobAmount = 0.035f;
-    [Tooltip("移动时上下微动的速度。")]
+
+    [Header("移动上下微动")]
+    [Tooltip("每次上下摆动的高度（Unity 单位）。建议 0.04 到 0.10。设为 0 可关闭。")]
+    [SerializeField, Range(0f, 0.2f)] private float moveBobAmount = 0.08f;
+    [Tooltip("上下摆动速度。数值越大摆动越快。")]
     [SerializeField, Min(0f)] private float moveBobSpeed = 10f;
 
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;
+    private Transform visualRoot;
     private Vector2 moveInput;
     private Vector2 lastFacing = Vector2.down;
     private Vector3 visualStartPosition;
@@ -45,52 +41,66 @@ public class PlayerController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        rb.gravityScale = 0f;
+        rb.freezeRotation = true;
+
+        // 先查找现有的视觉子物体。
         spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null)
+            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 
-        // 优先使用手动指定的视觉子物体；否则尝试寻找子物体上的 SpriteRenderer。
-        if (visualRoot == null)
+        if (spriteRenderer != null && spriteRenderer.transform == transform)
         {
-            if (spriteRenderer != null && spriteRenderer.transform != transform)
-                visualRoot = spriteRenderer.transform;
-            else
-            {
-                SpriteRenderer childRenderer = GetComponentInChildren<SpriteRenderer>();
-                if (childRenderer != null && childRenderer.transform != transform)
-                {
-                    spriteRenderer = childRenderer;
-                    visualRoot = childRenderer.transform;
-                }
-            }
-        }
+            // 图片原本就在 Player 根物体上：自动建立 Visual 子物体，
+            // 将 SpriteRenderer 的显示属性复制过去，根物体仍只负责物理移动。
+            SpriteRenderer source = spriteRenderer;
+            GameObject visualObject = new GameObject("Visual");
+            visualRoot = visualObject.transform;
+            visualRoot.SetParent(transform, false);
+            visualRoot.localPosition = Vector3.zero;
+            visualRoot.localRotation = Quaternion.identity;
+            visualRoot.localScale = Vector3.one;
 
-        // 如果 SpriteRenderer 在子物体上，使用它作为角色外观。
-        if (visualRoot != null)
-            spriteRenderer = visualRoot.GetComponent<SpriteRenderer>();
+            SpriteRenderer target = visualObject.AddComponent<SpriteRenderer>();
+            target.sprite = source.sprite;
+            target.color = source.color;
+            target.sharedMaterial = source.sharedMaterial;
+            target.sortingLayerID = source.sortingLayerID;
+            target.sortingOrder = source.sortingOrder;
+            target.flipX = source.flipX;
+            target.flipY = source.flipY;
+            target.drawMode = source.drawMode;
+            target.maskInteraction = source.maskInteraction;
+            target.enabled = source.enabled;
+            target.spriteSortPoint = source.spriteSortPoint;
+            source.enabled = false;
+            spriteRenderer = target;
+        }
+        else if (spriteRenderer != null)
+        {
+            visualRoot = spriteRenderer.transform;
+        }
 
         if (visualRoot != null)
         {
             visualStartPosition = visualRoot.localPosition;
             visualStartScale = visualRoot.localScale;
         }
-        else if (spriteRenderer != null)
+        else
         {
-            // 没有视觉子物体时仍可做缩放呼吸，但不移动根物体，避免和 Rigidbody2D 冲突。
-            visualStartScale = spriteRenderer.transform.localScale;
+            Debug.LogWarning("PlayerController：找不到 SpriteRenderer，请给 Player 添加角色图片。", this);
         }
 
-        // 俯视角移动不受重力影响，也不允许角色旋转。
-        rb.gravityScale = 0f;
-        rb.freezeRotation = true;
         UpdateFacingSprite();
     }
 
     private void Update()
     {
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        float vertical = Input.GetAxisRaw("Vertical");
-        moveInput = new Vector2(horizontal, vertical).normalized;
+        moveInput = new Vector2(
+            Input.GetAxisRaw("Horizontal"),
+            Input.GetAxisRaw("Vertical")
+        ).normalized;
 
-        // 仅在有输入时更新朝向；松开按键后保持最后朝向。
         if (moveInput.sqrMagnitude > 0.001f)
         {
             if (Mathf.Abs(moveInput.x) > Mathf.Abs(moveInput.y))
@@ -113,31 +123,27 @@ public class PlayerController : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (spriteRenderer == null)
+        if (visualRoot == null || spriteRenderer == null)
             return;
 
         animationTime += Time.deltaTime;
         bool isMoving = moveInput.sqrMagnitude > 0.001f;
 
-        // 待机时轻微呼吸；移动时降低呼吸幅度，避免角色显得过度弹跳。
+        // 待机呼吸：轻微缩放。移动时仍保留少量呼吸效果。
         float breath = Mathf.Sin(animationTime * idleBreathSpeed) * idleBreathAmount;
-        float scaleFactor = 1f + (isMoving ? breath * 0.35f : breath);
-
-        Transform scaleTarget = visualRoot != null ? visualRoot : spriteRenderer.transform;
-        scaleTarget.localScale = new Vector3(
-            visualStartScale.x * scaleFactor,
-            visualStartScale.y * (1f - breath * (isMoving ? 0.2f : 0.25f)),
+        float scaleX = 1f + breath * (isMoving ? 0.35f : 1f);
+        float scaleY = 1f - breath * 0.25f;
+        visualRoot.localScale = new Vector3(
+            visualStartScale.x * scaleX,
+            visualStartScale.y * scaleY,
             visualStartScale.z
         );
 
-        // 上下微动只作用于视觉子物体，不改变 Rigidbody2D 根物体的位置。
-        if (visualRoot != null)
-        {
-            float bob = isMoving
-                ? Mathf.Abs(Mathf.Sin(animationTime * moveBobSpeed)) * moveBobAmount
-                : 0f;
-            visualRoot.localPosition = visualStartPosition + Vector3.up * bob;
-        }
+        // 移动时上下弹动；停止时准确回到 Visual 的初始位置。
+        float bob = isMoving
+            ? Mathf.Abs(Mathf.Sin(animationTime * moveBobSpeed)) * moveBobAmount
+            : 0f;
+        visualRoot.localPosition = visualStartPosition + Vector3.up * bob;
     }
 
     private void UpdateFacingSprite()
@@ -151,7 +157,6 @@ public class PlayerController : MonoBehaviour
         else if (lastFacing == Vector2.left) targetSprite = leftSprite;
         else if (lastFacing == Vector2.right) targetSprite = rightSprite;
 
-        // 未绑定对应方向图片时保留当前图片，单张图片也能先完成测试。
         if (targetSprite != null)
             spriteRenderer.sprite = targetSprite;
     }
