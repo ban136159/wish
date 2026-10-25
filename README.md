@@ -1,15 +1,18 @@
-# 雾钟（Wu Zhong）Unity 项目基础目录
+# 雾钟（Wu Zhong）Unity 项目基础代码
 
 《雾钟》是一款 2D 俯视角中式民俗悬疑探索解谜游戏。玩家扮演沈砚，在每天清晨钟声响起后居民都会遗忘昨日的雾溪镇中，收集线索并调查洪灾与黑钟的真相。
 
-## 环境
-- Unity 6
-- 2D / Universal 2D 模板
-- C# 脚本放在 `Assets/Scripts/`
-- 场景、素材与音频按目录分类
+## 开发环境
 
-## 当前基础脚本
-- `Player/PlayerController.cs`：俯视角移动
+- Unity 2022.3.62f3 LTS
+- Universal 2D 模板
+- C# 脚本位于 `Assets/Scripts/`
+- 地图改为在 Unity 编辑器中使用 Grid、Tilemap 和 Tile Palette 手工搭建；本分支不包含自动地图生成器
+
+## 保留的核心脚本
+
+- `Player/PlayerController.cs`：主角四方向移动、方向贴图切换与可选的行走起伏效果
+- `Camera/WuzhongCameraFollow2D.cs`：2D 摄像机平滑跟随、轴向跟随开关与可选边界
 - `Interaction/IInteractable.cs`：可交互对象接口
 - `Interaction/PlayerInteractor.cs`：检测附近可交互对象并按 E 交互
 - `Interaction/ClueInteractable.cs`：调查并收集线索
@@ -19,34 +22,25 @@
 - `TimeLoop/TimeLoopManager.cs`：七日循环的基础计时与天数推进
 - `Core/GameManager.cs`：简单的全局管理入口
 
-## 导入步骤
-1. 将 `Assets/` 文件夹复制到 Unity 项目根目录（与 `Packages/` 同级）。
-2. 在 Unity 中等待脚本编译。
-3. 按下方的场景配置完成必要的 GameObject 组件绑定。
+## 导入与验证
 
-## 场景配置（最小可运行）
-### 玩家
-1. 创建 `Player` GameObject。
-2. 添加 `SpriteRenderer`、`Rigidbody2D`（Body Type 设为 Dynamic、Gravity Scale 设为 0、Freeze Rotation Z）和 `Collider2D`。
-3. 添加 `PlayerController` 与 `PlayerInteractor`。
-4. 在 `PlayerInteractor` 上设置 `Interact Point`（可创建一个子物体 `InteractPoint` 并拖入），并设置 `Interact Radius`。
-5. 可交互物体需在 `Interactable` Layer；将该 Layer 设为 `PlayerInteractor` 的 `Interactable Layers`。
+1. 将需要的 `Assets/Scripts/` 内容迁移到 Unity 项目的 `Assets/Scripts/` 下；不要覆盖整个 `ProjectSettings/` 或 `Packages/`。
+2. 在 Unity 中等待脚本编译完成，并检查 Console 是否有红色错误。
+3. 确保项目已安装并启用适用的输入系统设置。移动脚本兼容旧输入管理器；若使用新输入系统，请确认 Input System 包已安装并启用。
+4. 在测试场景中创建 Player，添加 `Rigidbody2D`、`Collider2D`、`SpriteRenderer` 和 `PlayerController`。
+5. 将 `WuzhongCameraFollow2D` 添加到 Main Camera，并将 Player 的 Transform 拖到 `Target` 字段。
 
-### 调查物品
-1. 创建物体并添加 `Collider2D`。
-2. 添加 `ClueInteractable`，填写 `Clue Id`、`Clue Title`、`Clue Description`。
-3. 把它放在 `Interactable` Layer。
-4. 按 E 调查；线索会登记到 `ClueJournal`。
+## 玩家配置
 
-### 对话
-1. 创建空物体 `DialogueManager` 并添加 `DialogueManager` 组件。
-2. 在 Canvas 中创建 Panel，将对话框对象拖到 `Dialogue Panel`。
-3. 对话文本 UI 可订阅 `LineChanged` 事件进行更新。
+- `Rigidbody2D` 建议设为 Dynamic，Gravity Scale 为 0，并冻结 Z 轴旋转。
+- 在 `PlayerController` 中按需分配 Front、Back、Left、Right 四方向 Sprite。
+- 脚本会在必要时将根物体上的 SpriteRenderer 移到视觉子物体，以避免行走起伏影响物理根物体。
+- 使用 2D 正交摄像机；常见 Z 偏移为 -10。若不需要平滑跟随，可在摄像机脚本中关闭 Smooth Follow。
 
-### 时间循环
-1. 创建空物体 `TimeLoopManager` 并添加 `TimeLoopManager`。
-2. 在 Inspector 设置 `Days Per Loop`、`Day Length Seconds`。
-3. 当前版本提供天数/循环事件框架；存档、每日世界状态重置与多结局条件需要后续实现。
+## 手工创建地图
 
-## 推荐目录
-场景、素材、音频、预制体和 ScriptableObject 目录已预留；目前尚未包含最终美术资源、完整任务系统、存档系统、谜题逻辑或多结局实现。使用前请在 Unity 中测试并按需调整。
+本分支移除了自动地图生成器及其自定义 Inspector 工具。请在 Unity 中通过 `GameObject > 2D Object > Tilemap` 创建 Grid/Tilemap，再用 Tile Palette 绘制地面和道路。大型建筑、树木和灯笼可以作为独立 SpriteRenderer 对象放置，并根据需要添加 Collider2D。
+
+## 当前范围
+
+对话、交互、线索记录和时间循环脚本仍保留为基础框架，使用前请在 Unity 中验证并按项目需求调整。完整任务系统、存档、每日世界状态重置和多结局逻辑仍需后续开发。
