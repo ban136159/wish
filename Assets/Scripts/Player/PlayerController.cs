@@ -1,16 +1,25 @@
 using UnityEngine;
 
 /// <summary>
-/// 《雾钟》主角控制器：四方向移动、方向图片切换、待机呼吸和移动上下微动。
+/// 《雾钟》主角控制器：四方向移动、方向图片切换、待机呼吸、移动上下微动和脚底碰撞箱。
 /// 角色图片直接放在 Player 根物体上也可以；脚本会自动创建 Visual 子物体来承载图片动画。
 /// 适用于 Unity 2022.3 及更新版本。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(BoxCollider2D))]
 public class PlayerController : MonoBehaviour
 {
     [Header("移动设置")]
     [SerializeField, Min(0f)] private float moveSpeed = 3.5f;
+
+    [Header("脚底碰撞箱")]
+    [Tooltip("碰撞箱宽度占角色图片宽度的比例。")]
+    [SerializeField, Range(0.1f, 1f)] private float colliderWidthRatio = 0.45f;
+    [Tooltip("碰撞箱高度占角色图片高度的比例。")]
+    [SerializeField, Range(0.05f, 0.5f)] private float colliderHeightRatio = 0.18f;
+    [Tooltip("脚底碰撞箱向上或向下微调。正数向上，负数向下。")]
+    [SerializeField] private float colliderOffsetY = 0f;
 
     [Header("四方向角色图片（可选）")]
     [SerializeField] private Sprite downSprite;
@@ -30,6 +39,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField, Min(0f)] private float moveBobSpeed = 10f;
 
     private Rigidbody2D rb;
+    private BoxCollider2D bodyCollider;
     private SpriteRenderer spriteRenderer;
     private Transform visualRoot;
     private Vector2 moveInput;
@@ -41,6 +51,7 @@ public class PlayerController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        bodyCollider = GetComponent<BoxCollider2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
 
@@ -81,6 +92,8 @@ public class PlayerController : MonoBehaviour
             visualRoot = spriteRenderer.transform;
         }
 
+        ConfigureFootCollider();
+
         if (visualRoot != null)
         {
             visualStartPosition = visualRoot.localPosition;
@@ -92,6 +105,37 @@ public class PlayerController : MonoBehaviour
         }
 
         UpdateFacingSprite();
+    }
+
+    /// <summary>
+    /// 将碰撞箱缩小到角色脚底附近。碰撞箱放在 Player 根物体上，
+    /// 因此不会跟随 Visual 的呼吸缩放和上下微动一起抖动。
+    /// </summary>
+    private void ConfigureFootCollider()
+    {
+        bodyCollider.isTrigger = false;
+
+        if (spriteRenderer != null && spriteRenderer.sprite != null)
+        {
+            Bounds spriteBounds = spriteRenderer.sprite.bounds;
+            float width = Mathf.Max(0.05f, spriteBounds.size.x * colliderWidthRatio);
+            float height = Mathf.Max(0.05f, spriteBounds.size.y * colliderHeightRatio);
+
+            bodyCollider.size = new Vector2(width, height);
+            // Sprite bounds 的底边位置，再加上视觉子物体的本地偏移。
+            bodyCollider.offset = new Vector2(
+                0f,
+                spriteBounds.min.y + height * 0.5f +
+                (visualRoot != null ? visualRoot.localPosition.y : 0f) +
+                colliderOffsetY
+            );
+        }
+        else
+        {
+            // 找不到图片时使用一个小型脚底碰撞箱作为后备值。
+            bodyCollider.size = new Vector2(0.35f, 0.18f);
+            bodyCollider.offset = new Vector2(0f, -0.4f + colliderOffsetY);
+        }
     }
 
     private void Update()
@@ -166,5 +210,7 @@ public class PlayerController : MonoBehaviour
         moveSpeed = Mathf.Max(0f, moveSpeed);
         idleBreathSpeed = Mathf.Max(0f, idleBreathSpeed);
         moveBobSpeed = Mathf.Max(0f, moveBobSpeed);
+        colliderWidthRatio = Mathf.Clamp(colliderWidthRatio, 0.1f, 1f);
+        colliderHeightRatio = Mathf.Clamp(colliderHeightRatio, 0.05f, 0.5f);
     }
 }
