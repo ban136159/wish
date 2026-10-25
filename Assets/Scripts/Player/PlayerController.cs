@@ -1,10 +1,12 @@
 using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 /// <summary>
 /// 《雾钟》主角移动控制器。
-/// 支持四方向贴图切换，并在移动时对 SpriteRenderer 做轻微上下跳动。
-/// 跳动只作用于 SpriteRenderer，不移动 Rigidbody2D，避免影响碰撞与摄像机。
-/// 四张方向贴图建议使用一致的 Pivot（通常是 Bottom Center）。
+/// 支持四方向贴图切换，并可在独立的视觉子物体上播放轻微上下跳动。
+/// Rigidbody2D 所在的根物体只负责移动和碰撞，避免视觉动画干扰物理。
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerController : MonoBehaviour
@@ -15,9 +17,9 @@ public class PlayerController : MonoBehaviour
     [SerializeField, Min(0f)] private float inputSmoothTime = 0.04f;
 
     [Header("移动跳动效果")]
-    [Tooltip("移动时启用轻微上下跳动。")]
+    [Tooltip("移动时启用轻微上下跳动。需要将 SpriteRenderer 放在主角的子物体上。")]
     [SerializeField] private bool enableWalkBob = true;
-    [Tooltip("跳动幅度（世界单位）。建议 0.015 到 0.04，越小越轻微。")]
+    [Tooltip("跳动幅度（世界单位）。建议 0.015 到 0.04。")]
     [SerializeField, Range(0f, 0.1f)] private float bobAmplitude = 0.025f;
     [Tooltip("每秒跳动频率。建议 5 到 8。")]
     [SerializeField, Range(1f, 15f)] private float bobFrequency = 6f;
@@ -45,12 +47,10 @@ public class PlayerController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        spriteRenderer = GetComponent<SpriteRenderer>();
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 
-        if (spriteRenderer == null)
-            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
-
-        if (spriteRenderer != null)
+        // 只对独立的视觉子物体做跳动，绝不改动 Rigidbody2D 根物体的位置。
+        if (spriteRenderer != null && spriteRenderer.transform != transform)
         {
             spriteTransform = spriteRenderer.transform;
             spriteBaseLocalPosition = spriteTransform.localPosition;
@@ -65,11 +65,7 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
-        Vector2 rawInput = new Vector2(
-            Input.GetAxisRaw("Horizontal"),
-            Input.GetAxisRaw("Vertical")
-        );
-
+        Vector2 rawInput = ReadMoveInput();
         if (rawInput.sqrMagnitude > 1f)
             rawInput.Normalize();
 
@@ -94,6 +90,36 @@ public class PlayerController : MonoBehaviour
         UpdateWalkBob();
     }
 
+    private Vector2 ReadMoveInput()
+    {
+        Vector2 input = Vector2.zero;
+
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null)
+        {
+            if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed)
+                input.x -= 1f;
+            if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed)
+                input.x += 1f;
+            if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed)
+                input.y -= 1f;
+            if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)
+                input.y += 1f;
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        // 新旧输入系统同时启用时，优先采用有实际输入的那一套。
+        if (input.sqrMagnitude < 0.01f)
+        {
+            input.x = Input.GetAxisRaw("Horizontal");
+            input.y = Input.GetAxisRaw("Vertical");
+        }
+#endif
+
+        return input;
+    }
+
     private void FixedUpdate()
     {
 #if UNITY_6000_0_OR_NEWER
@@ -115,7 +141,6 @@ public class PlayerController : MonoBehaviour
         if (isMoving && enableWalkBob)
             bobTime += Time.deltaTime * bobFrequency * Mathf.PI * 2f;
 
-        // 使用正弦波的上半部分，让角色呈现轻微、规律的脚步起伏。
         float bobOffset = Mathf.Abs(Mathf.Sin(bobTime)) * bobAmplitude * bobWeight;
         Vector3 localPosition = spriteBaseLocalPosition;
         localPosition.y += bobOffset;
@@ -128,7 +153,6 @@ public class PlayerController : MonoBehaviour
             return;
 
         Sprite nextSprite = null;
-
         if (lastFacing == Vector2.up)
             nextSprite = backSprite;
         else if (lastFacing == Vector2.down)
@@ -144,7 +168,6 @@ public class PlayerController : MonoBehaviour
 
     private void OnDisable()
     {
-        // 禁用脚本时复位贴图位置，避免角色停在跳动的最高点。
         if (spriteTransform != null)
             spriteTransform.localPosition = spriteBaseLocalPosition;
         bobWeight = 0f;
