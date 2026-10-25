@@ -170,6 +170,11 @@ public class PlayerController : MonoBehaviour
         if (visualRoot == null || spriteRenderer == null)
             return;
 
+        // 使用脚底碰撞箱的最低点进行 Y 轴排序：脚底越靠下，角色越靠前。
+        // 房屋根物体上的 WuzhongYSort 也必须使用相同的 Sorting Layer。
+        if (bodyCollider != null)
+            spriteRenderer.sortingOrder = -Mathf.RoundToInt(bodyCollider.bounds.min.y * 100f);
+
         animationTime += Time.deltaTime;
         bool isMoving = moveInput.sqrMagnitude > 0.001f;
 
