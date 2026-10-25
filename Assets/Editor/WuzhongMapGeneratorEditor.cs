@@ -28,9 +28,6 @@ public class WuzhongMapGeneratorEditor : Editor
         {
             if (GUILayout.Button("一键生成村落地面与道路", GUILayout.Height(40)))
             {
-                Undo.RegisterFullObjectHierarchyUndo(
-                    generator.gameObject.scene, "生成《雾钟》地图");
-
                 generator.GenerateMap();
 
                 EditorUtility.SetDirty(generator);
@@ -102,7 +99,6 @@ public class WuzhongMapGeneratorEditor : Editor
             Transform grid = generator.groundTilemap.transform.parent;
             GameObject roadObject = new GameObject(
                 "Road_Tilemap",
-                typeof(GridLayout),
                 typeof(Tilemap),
                 typeof(TilemapRenderer));
 
