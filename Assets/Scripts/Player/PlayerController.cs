@@ -5,8 +5,8 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// 《雾钟》主角移动控制器。
-/// 支持四方向贴图切换，并可在独立的视觉子物体上播放轻微上下跳动。
-/// Rigidbody2D 所在的根物体只负责移动和碰撞，避免视觉动画干扰物理。
+/// 支持四方向贴图切换和移动时轻微上下跳动。
+/// 跳动只移动视觉子物体，不影响 Rigidbody2D 的物理根物体。
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerController : MonoBehaviour
@@ -17,13 +17,11 @@ public class PlayerController : MonoBehaviour
     [SerializeField, Min(0f)] private float inputSmoothTime = 0.04f;
 
     [Header("移动跳动效果")]
-    [Tooltip("移动时启用轻微上下跳动。需要将 SpriteRenderer 放在主角的子物体上。")]
     [SerializeField] private bool enableWalkBob = true;
     [Tooltip("跳动幅度（世界单位）。建议 0.015 到 0.04。")]
     [SerializeField, Range(0f, 0.1f)] private float bobAmplitude = 0.025f;
     [Tooltip("每秒跳动频率。建议 5 到 8。")]
     [SerializeField, Range(1f, 15f)] private float bobFrequency = 6f;
-    [Tooltip("开始和停止移动时跳动淡入/淡出的速度。")]
     [SerializeField, Min(0.01f)] private float bobFadeSpeed = 10f;
 
     [Header("四方向角色贴图")]
@@ -49,8 +47,12 @@ public class PlayerController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 
-        // 只对独立的视觉子物体做跳动，绝不改动 Rigidbody2D 根物体的位置。
-        if (spriteRenderer != null && spriteRenderer.transform != transform)
+        // 如果 SpriteRenderer 挂在物理根物体上，运行时建立独立视觉子物体，
+        // 避免为了跳动而移动带有 Rigidbody2D/Collider2D 的根物体。
+        if (spriteRenderer != null && spriteRenderer.transform == transform)
+            MoveRendererToVisualChild();
+
+        if (spriteRenderer != null)
         {
             spriteTransform = spriteRenderer.transform;
             spriteBaseLocalPosition = spriteTransform.localPosition;
@@ -59,8 +61,36 @@ public class PlayerController : MonoBehaviour
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-
         ApplyFacingSprite();
+    }
+
+    private void MoveRendererToVisualChild()
+    {
+        SpriteRenderer oldRenderer = spriteRenderer;
+        GameObject visual = new GameObject("Visual");
+        visual.transform.SetParent(transform, false);
+        visual.transform.localPosition = Vector3.zero;
+        visual.transform.localRotation = Quaternion.identity;
+        visual.transform.localScale = Vector3.one;
+
+        SpriteRenderer newRenderer = visual.AddComponent<SpriteRenderer>();
+        newRenderer.sprite = oldRenderer.sprite;
+        newRenderer.color = oldRenderer.color;
+        newRenderer.flipX = oldRenderer.flipX;
+        newRenderer.flipY = oldRenderer.flipY;
+        newRenderer.sharedMaterial = oldRenderer.sharedMaterial;
+        newRenderer.sortingLayerID = oldRenderer.sortingLayerID;
+        newRenderer.sortingOrder = oldRenderer.sortingOrder;
+        newRenderer.maskInteraction = oldRenderer.maskInteraction;
+        newRenderer.drawMode = oldRenderer.drawMode;
+        newRenderer.size = oldRenderer.size;
+        newRenderer.tileMode = oldRenderer.tileMode;
+        newRenderer.spriteSortPoint = oldRenderer.spriteSortPoint;
+        newRenderer.enabled = oldRenderer.enabled;
+
+        // 禁用根物体上的渲染器，避免画面重叠；原组件保留，避免破坏场景配置。
+        oldRenderer.enabled = false;
+        spriteRenderer = newRenderer;
     }
 
     private void Update()
@@ -97,26 +127,20 @@ public class PlayerController : MonoBehaviour
 #if ENABLE_INPUT_SYSTEM
         if (Keyboard.current != null)
         {
-            if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed)
-                input.x -= 1f;
-            if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed)
-                input.x += 1f;
-            if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed)
-                input.y -= 1f;
-            if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)
-                input.y += 1f;
+            if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed) input.x -= 1f;
+            if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) input.x += 1f;
+            if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed) input.y -= 1f;
+            if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed) input.y += 1f;
         }
 #endif
 
 #if ENABLE_LEGACY_INPUT_MANAGER
-        // 新旧输入系统同时启用时，优先采用有实际输入的那一套。
         if (input.sqrMagnitude < 0.01f)
         {
             input.x = Input.GetAxisRaw("Horizontal");
             input.y = Input.GetAxisRaw("Vertical");
         }
 #endif
-
         return input;
     }
 
@@ -153,14 +177,10 @@ public class PlayerController : MonoBehaviour
             return;
 
         Sprite nextSprite = null;
-        if (lastFacing == Vector2.up)
-            nextSprite = backSprite;
-        else if (lastFacing == Vector2.down)
-            nextSprite = frontSprite;
-        else if (lastFacing == Vector2.left)
-            nextSprite = leftSprite;
-        else if (lastFacing == Vector2.right)
-            nextSprite = rightSprite;
+        if (lastFacing == Vector2.up) nextSprite = backSprite;
+        else if (lastFacing == Vector2.down) nextSprite = frontSprite;
+        else if (lastFacing == Vector2.left) nextSprite = leftSprite;
+        else if (lastFacing == Vector2.right) nextSprite = rightSprite;
 
         if (nextSprite != null)
             spriteRenderer.sprite = nextSprite;
