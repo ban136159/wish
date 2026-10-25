@@ -1,21 +1,16 @@
 using UnityEngine;
 
 /// <summary>
-/// 《雾钟》主角控制器：四方向移动、方向图片切换、待机呼吸、移动上下微动和脚底碰撞箱。
+/// 《雾钟》主角控制器：四方向移动、方向图片切换、待机呼吸、移动上下微动和 Y 轴显示排序。
 /// 角色图片直接放在 Player 根物体上也可以；脚本会自动创建 Visual 子物体来承载图片动画。
-/// 适用于 Unity 2022.3 及更新版本。
+/// 适用于 Unity 2022.3 及更新版本。此脚本不再要求或控制任何碰撞箱。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
-[RequireComponent(typeof(PolygonCollider2D))]
 public class PlayerController : MonoBehaviour
 {
     [Header("移动设置")]
     [SerializeField, Min(0f)] private float moveSpeed = 3.5f;
-
-    [Header("碰撞箱")]
-    [Tooltip("使用 Player 上的 PolygonCollider2D，在 Inspector 中点击 Edit Collider 手动编辑顶点。脚本不会覆盖你编辑的顶点。")]
-    [SerializeField] private bool keepColliderAsSolid = true;
 
     [Header("四方向角色图片（可选）")]
     [SerializeField] private Sprite downSprite;
@@ -35,7 +30,6 @@ public class PlayerController : MonoBehaviour
     [SerializeField, Min(0f)] private float moveBobSpeed = 10f;
 
     private Rigidbody2D rb;
-    private PolygonCollider2D bodyCollider;
     private SpriteRenderer spriteRenderer;
     private Transform visualRoot;
     private Vector2 moveInput;
@@ -47,7 +41,6 @@ public class PlayerController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        bodyCollider = GetComponent<PolygonCollider2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
 
@@ -87,10 +80,6 @@ public class PlayerController : MonoBehaviour
         {
             visualRoot = spriteRenderer.transform;
         }
-
-        // 保留 PolygonCollider2D 中手动编辑的路径顶点，不在运行时重建碰撞轮廓。
-        if (bodyCollider != null && keepColliderAsSolid)
-            bodyCollider.isTrigger = false;
 
         if (visualRoot != null)
         {
@@ -137,10 +126,8 @@ public class PlayerController : MonoBehaviour
         if (visualRoot == null || spriteRenderer == null)
             return;
 
-        // 使用脚底碰撞箱的最低点进行 Y 轴排序：脚底越靠下，角色越靠前。
-        // 房屋根物体上的 WuzhongYSort 也必须使用相同的 Sorting Layer。
-        if (bodyCollider != null)
-            spriteRenderer.sortingOrder = -Mathf.RoundToInt(bodyCollider.bounds.min.y * 100f);
+        // 不依赖碰撞箱，直接按 Player 根物体的世界 Y 坐标进行排序。
+        spriteRenderer.sortingOrder = -Mathf.RoundToInt(transform.position.y * 100f);
 
         animationTime += Time.deltaTime;
         bool isMoving = moveInput.sqrMagnitude > 0.001f;
