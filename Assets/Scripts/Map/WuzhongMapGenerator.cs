@@ -312,12 +312,27 @@ public class WuzhongMapGenerator : MonoBehaviour
                 for (int oy = y; oy < y + h; oy++)
                     occupied[ox, oy] = true;
 
-            Vector3 world = worldOrigin + new Vector2((x + w * 0.5f) * cellSize, (y + h * 0.5f) * cellSize);
+            // 使用 Tilemap 的真实网格坐标转换到世界坐标，避免 Grid/Tilemap 的位置、
+            // 缩放或实际 Cell Size 与手动 worldOrigin/cellSize 不一致造成物件跑出地图。
+            Vector3 bottomLeft = groundTilemap.CellToWorld(new Vector3Int(x, y, 0));
+            Vector3 topRight = groundTilemap.CellToWorld(new Vector3Int(x + w, y + h, 0));
+            Vector3 world = (bottomLeft + topRight) * 0.5f;
             world.z = entry.zOffset;
+
+            // 微调值只允许在地图范围内移动，防止误把装饰推到地图边界之外。
+            Vector3 mapMin = groundTilemap.CellToWorld(Vector3Int.zero);
+            Vector3 mapMax = groundTilemap.CellToWorld(new Vector3Int(mapWidth, mapHeight, 0));
+            float minX = Mathf.Min(mapMin.x, mapMax.x);
+            float maxX = Mathf.Max(mapMin.x, mapMax.x);
+            float minY = Mathf.Min(mapMin.y, mapMax.y);
+            float maxY = Mathf.Max(mapMin.y, mapMax.y);
+            Vector3 offset = (Vector3)entry.positionOffset;
+            world.x = Mathf.Clamp(world.x + offset.x, minX + 0.01f, maxX - 0.01f);
+            world.y = Mathf.Clamp(world.y + offset.y, minY + 0.01f, maxY - 0.01f);
 
             GameObject obj = new GameObject(entry.sprite.name);
             obj.transform.SetParent(group, true);
-            obj.transform.position = world + (Vector3)entry.positionOffset;
+            obj.transform.position = world;
 
             SpriteRenderer sr = obj.AddComponent<SpriteRenderer>();
             sr.sprite = entry.sprite;
