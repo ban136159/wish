@@ -1,8 +1,7 @@
-using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>建筑通用交互：可配置为对话、调查或进入场景。</summary>
+/// <summary>建筑交互逻辑：负责对话、调查和开门行为，所有界面交由 WuzhongUIManager 显示。</summary>
 public class BuildingInteractable : MonoBehaviour, IInteractable
 {
     public enum InteractionType { Dialogue, Investigation, OpenDoor }
@@ -19,12 +18,12 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
     [Header("调查")]
     [TextArea(2, 5)]
     [SerializeField] private string investigationText = "门前的泥地上，有一串通往祠堂的湿脚印。";
-    [SerializeField] private GameObject investigationPanel;
-    [SerializeField] private TMP_Text investigationLabel;
 
     [Header("开门 / 进入场景")]
     [SerializeField] private string sceneName;
     [SerializeField] private bool logDoorInsteadOfLoading;
+
+    private WuzhongUIManager uiManager;
 
     public string InteractionPrompt
     {
@@ -43,7 +42,9 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
     private void Awake()
     {
         if (dialogueManager == null) dialogueManager = FindObjectOfType<DialogueManager>();
-        if (investigationPanel != null) investigationPanel.SetActive(false);
+        uiManager = WuzhongUIManager.Instance != null
+            ? WuzhongUIManager.Instance
+            : FindObjectOfType<WuzhongUIManager>();
     }
 
     public void Interact()
@@ -74,9 +75,15 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
 
     private void ShowInvestigation()
     {
-        Debug.Log($"【调查：{buildingName}】{investigationText}", this);
-        if (investigationLabel != null) investigationLabel.text = investigationText;
-        if (investigationPanel != null) investigationPanel.SetActive(true);
+        if (uiManager == null)
+            uiManager = WuzhongUIManager.Instance != null
+                ? WuzhongUIManager.Instance
+                : FindObjectOfType<WuzhongUIManager>();
+
+        if (uiManager != null)
+            uiManager.ShowInvestigation($"【{buildingName}】\n{investigationText}");
+        else
+            Debug.Log($"【调查：{buildingName}】{investigationText}", this);
     }
 
     private void OpenDoor()
@@ -99,9 +106,13 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
         SceneManager.LoadScene(sceneName);
     }
 
-    /// <summary>可绑定到调查面板的关闭按钮。</summary>
+    /// <summary>关闭中央 UI 层中的调查面板。</summary>
     public void HideInvestigation()
     {
-        if (investigationPanel != null) investigationPanel.SetActive(false);
+        if (uiManager == null)
+            uiManager = WuzhongUIManager.Instance != null
+                ? WuzhongUIManager.Instance
+                : FindObjectOfType<WuzhongUIManager>();
+        if (uiManager != null) uiManager.HideInvestigation();
     }
 }
