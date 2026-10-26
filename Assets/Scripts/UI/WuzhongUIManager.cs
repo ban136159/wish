@@ -2,10 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// 《雾钟》统一 UI 层。所有提示、对话和调查文本都由此管理，
-/// 并统一放在独立的 Screen Space Overlay Canvas 中。
-/// </summary>
+/// <summary>《雾钟》统一 UI 层：集中管理交互提示、对话和调查界面。</summary>
 [DefaultExecutionOrder(-100)]
 public class WuzhongUIManager : MonoBehaviour
 {
@@ -15,7 +12,6 @@ public class WuzhongUIManager : MonoBehaviour
     [SerializeField] private Vector2 referenceResolution = new Vector2(1920, 1080);
     [SerializeField] private float promptBottomOffset = 90f;
 
-    private Canvas uiCanvas;
     private GameObject promptPanel;
     private TMP_Text promptText;
     private GameObject dialoguePanel;
@@ -37,15 +33,9 @@ public class WuzhongUIManager : MonoBehaviour
         BuildUI();
     }
 
-    private void Start()
-    {
-        BindDialogueManager();
-    }
+    private void Start() => BindDialogueManager();
 
-    private void OnEnable()
-    {
-        BindDialogueManager();
-    }
+    private void OnEnable() => BindDialogueManager();
 
     private void OnDisable()
     {
@@ -60,6 +50,9 @@ public class WuzhongUIManager : MonoBehaviour
     {
         if (dialogueManager == null)
             BindDialogueManager();
+
+        if (investigationPanel != null && investigationPanel.activeSelf && Input.GetKeyDown(KeyCode.Escape))
+            HideInvestigation();
     }
 
     private void BindDialogueManager()
@@ -86,9 +79,9 @@ public class WuzhongUIManager : MonoBehaviour
         GameObject canvasObject = new GameObject("WuzhongUI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasObject.transform.SetParent(transform, false);
 
-        uiCanvas = canvasObject.GetComponent<Canvas>();
-        uiCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        uiCanvas.sortingOrder = 100;
+        Canvas canvas = canvasObject.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 100;
 
         CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -161,8 +154,11 @@ public class WuzhongUIManager : MonoBehaviour
     public void SetInteractionPrompt(bool visible, string message = "")
     {
         if (promptPanel == null) return;
-        promptPanel.SetActive(visible);
-        if (visible && promptText != null) promptText.text = message;
+        bool anotherPanelOpen = (dialoguePanel != null && dialoguePanel.activeSelf) ||
+                                (investigationPanel != null && investigationPanel.activeSelf);
+        bool shouldShow = visible && !anotherPanelOpen;
+        promptPanel.SetActive(shouldShow);
+        if (shouldShow && promptText != null) promptText.text = message;
     }
 
     public void ShowInvestigation(string message)
