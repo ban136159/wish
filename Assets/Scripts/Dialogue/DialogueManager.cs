@@ -1,10 +1,9 @@
 using System;
 using UnityEngine;
 
-/// <summary>《雾钟》对话管理器，保留原有公开方法和事件。</summary>
+/// <summary>《雾钟》对话逻辑管理器：只管理台词顺序和对话状态，UI 由 WuzhongUIManager 统一显示。</summary>
 public class DialogueManager : MonoBehaviour
 {
-    [SerializeField] private GameObject dialoguePanel;
     [SerializeField] private DialogueLine[] openingLines;
     private int lineIndex;
     private int startedFrame = -1;
@@ -12,11 +11,6 @@ public class DialogueManager : MonoBehaviour
     public bool IsPlaying { get; private set; }
     public event Action<DialogueLine> LineChanged;
     public event Action DialogueEnded;
-
-    private void Start()
-    {
-        if (dialoguePanel != null) dialoguePanel.SetActive(false);
-    }
 
     private void Update()
     {
@@ -38,7 +32,6 @@ public class DialogueManager : MonoBehaviour
         lineIndex = 0;
         IsPlaying = true;
         startedFrame = Time.frameCount;
-        if (dialoguePanel != null) dialoguePanel.SetActive(true);
         LineChanged?.Invoke(openingLines[lineIndex]);
     }
 
@@ -48,13 +41,14 @@ public class DialogueManager : MonoBehaviour
     {
         if (!IsPlaying) return;
         lineIndex++;
+
         if (openingLines == null || lineIndex >= openingLines.Length)
         {
             IsPlaying = false;
-            if (dialoguePanel != null) dialoguePanel.SetActive(false);
             DialogueEnded?.Invoke();
             return;
         }
+
         LineChanged?.Invoke(openingLines[lineIndex]);
     }
 
