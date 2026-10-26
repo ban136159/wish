@@ -2,17 +2,16 @@ using TMPro;
 using UnityEngine;
 
 /// <summary>
-/// Detects nearby interactable objects, displays the interaction prompt,
-/// and triggers the selected interaction when the player presses E.
+/// 检测主角附近的可交互物体，显示提示，并在按下 E 时触发交互。
 /// </summary>
 public class PlayerInteractor : MonoBehaviour
 {
-    [Header("Detection")]
+    [Header("检测设置")]
     [SerializeField] private Transform interactPoint;
     [SerializeField, Min(0.1f)] private float interactRadius = 1.2f;
-    [SerializeField] private LayerMask interactableLayers;
+    [SerializeField] private LayerMask interactableLayers = ~0;
 
-    [Header("Interaction Prompt")]
+    [Header("交互提示")]
     [SerializeField] private TMP_Text promptText;
     [SerializeField] private string keyLabel = "E";
 
@@ -34,10 +33,6 @@ public class PlayerInteractor : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Finds the nearest interactable collider inside the configured radius.
-    /// Interactable colliders must be on a layer included in Interactable Layers.
-    /// </summary>
     private void FindTarget()
     {
         currentTarget = null;
@@ -46,11 +41,9 @@ public class PlayerInteractor : MonoBehaviour
             ? (Vector2)interactPoint.position
             : (Vector2)transform.position;
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(
-            center,
-            interactRadius,
-            interactableLayers
-        );
+        Collider2D[] hits = interactableLayers.value == 0
+            ? Physics2D.OverlapCircleAll(center, interactRadius)
+            : Physics2D.OverlapCircleAll(center, interactRadius, interactableLayers);
 
         float nearestDistance = float.MaxValue;
 
@@ -58,9 +51,7 @@ public class PlayerInteractor : MonoBehaviour
         {
             IInteractable candidate = hit.GetComponentInParent<IInteractable>();
             if (candidate == null)
-            {
                 continue;
-            }
 
             float distance = Vector2.Distance(center, hit.ClosestPoint(center));
             if (distance < nearestDistance)
@@ -71,31 +62,22 @@ public class PlayerInteractor : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Shows a prompt for the current target, or hides it when no target is nearby.
-    /// </summary>
     private void UpdatePrompt()
     {
         if (promptText == null)
-        {
             return;
-        }
 
         bool canInteract = currentTarget != null;
         SetPromptVisible(canInteract);
 
         if (canInteract)
-        {
             promptText.text = $"[{keyLabel}] {currentTarget.InteractionPrompt}";
-        }
     }
 
     private void SetPromptVisible(bool visible)
     {
         if (promptText != null)
-        {
             promptText.gameObject.SetActive(visible);
-        }
     }
 
     private void OnDisable()
@@ -109,7 +91,6 @@ public class PlayerInteractor : MonoBehaviour
         Vector3 center = interactPoint != null
             ? interactPoint.position
             : transform.position;
-
         Gizmos.DrawWireSphere(center, interactRadius);
     }
 }
