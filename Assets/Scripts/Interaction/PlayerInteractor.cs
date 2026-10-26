@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>《雾钟》通用交互入口：检测最近的可交互对象并响应 E。</summary>
 public class PlayerInteractor : MonoBehaviour
@@ -13,8 +14,30 @@ public class PlayerInteractor : MonoBehaviour
     [SerializeField] private TMP_Text promptText;
     [SerializeField] private string keyLabel = "E";
 
+    // Optional references used by the editor setup helper.
+    private Canvas promptCanvas;
+    private Image promptBackground;
+
     private IInteractable currentTarget;
     private DialogueManager dialogueManager;
+
+    /// <summary>
+    /// Connects the prompt UI created by WuzhongInteractionSetup.
+    /// The three-argument signature keeps older local editor helpers compatible.
+    /// </summary>
+    public void ConfigurePrompt(Canvas canvas, TMP_Text text, Image background)
+    {
+        promptCanvas = canvas;
+        promptText = text;
+        promptBackground = background;
+
+        if (promptText != null)
+            promptText.gameObject.SetActive(false);
+        if (promptBackground != null)
+            promptBackground.gameObject.SetActive(false);
+        if (promptCanvas != null)
+            promptCanvas.gameObject.SetActive(false);
+    }
 
     private void Awake()
     {
@@ -71,8 +94,14 @@ public class PlayerInteractor : MonoBehaviour
 
     private void SetPromptVisible(bool visible)
     {
+        if (promptCanvas != null && promptCanvas.gameObject.activeSelf != visible)
+            promptCanvas.gameObject.SetActive(visible);
+
         if (promptText != null && promptText.gameObject.activeSelf != visible)
             promptText.gameObject.SetActive(visible);
+
+        if (promptBackground != null && promptBackground.gameObject.activeSelf != visible)
+            promptBackground.gameObject.SetActive(visible);
     }
 
     private void OnDisable() => SetPromptVisible(false);
