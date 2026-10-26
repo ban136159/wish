@@ -63,6 +63,13 @@ public class PlayerInteractor : MonoBehaviour
 
     private void Update()
     {
+        // 对话打开时，E 键由 DialogueManager 接管，避免重复触发建筑交互。
+        if (DialogueManager.Instance != null && DialogueManager.Instance.IsDialogueOpen)
+        {
+            SetPromptVisible(false);
+            return;
+        }
+
         FindTarget();
         UpdatePrompt();
 
