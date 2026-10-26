@@ -1,67 +1,57 @@
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
-/// <summary>《雾钟》通用交互入口：检测最近的可交互对象并响应 E。</summary>
+/// <summary>《雾钟》交互入口：只负责检测交互目标和输入，不直接创建或控制 UI。</summary>
 public class PlayerInteractor : MonoBehaviour
 {
     [Header("Detection")]
     [SerializeField] private Transform interactPoint;
     [SerializeField, Min(0.1f)] private float interactRadius = 1.2f;
     [SerializeField] private LayerMask interactableLayers = ~0;
-
-    [Header("Interaction Prompt")]
-    [SerializeField] private TMP_Text promptText;
     [SerializeField] private string keyLabel = "E";
-
-    // Optional references used by the editor setup helper.
-    private Canvas promptCanvas;
-    private Image promptBackground;
 
     private IInteractable currentTarget;
     private DialogueManager dialogueManager;
-
-    /// <summary>
-    /// Connects the prompt UI created by WuzhongInteractionSetup.
-    /// The three-argument signature keeps older local editor helpers compatible.
-    /// </summary>
-    public void ConfigurePrompt(Canvas canvas, TMP_Text text, Image background)
-    {
-        promptCanvas = canvas;
-        promptText = text;
-        promptBackground = background;
-
-        if (promptText != null)
-            promptText.gameObject.SetActive(false);
-        if (promptBackground != null)
-            promptBackground.gameObject.SetActive(false);
-        if (promptCanvas != null)
-            promptCanvas.gameObject.SetActive(false);
-    }
+    private WuzhongUIManager uiManager;
 
     private void Awake()
     {
         dialogueManager = FindObjectOfType<DialogueManager>();
-        SetPromptVisible(false);
+        EnsureUIManager();
+        uiManager.SetInteractionPrompt(false);
     }
 
     private void Update()
     {
         if (dialogueManager == null)
             dialogueManager = FindObjectOfType<DialogueManager>();
+        EnsureUIManager();
 
-        // 对话期间 E 由 DialogueManager 推进，不再触发场景交互。
         if (dialogueManager != null && dialogueManager.IsPlaying)
         {
             currentTarget = null;
-            SetPromptVisible(false);
+            uiManager.SetInteractionPrompt(false);
             return;
         }
 
         FindTarget();
         UpdatePrompt();
+
         if (currentTarget != null && Input.GetKeyDown(KeyCode.E))
             currentTarget.Interact();
+    }
+
+    private void EnsureUIManager()
+    {
+        if (uiManager != null) return;
+        uiManager = WuzhongUIManager.Instance != null
+            ? WuzhongUIManager.Instance
+            : FindObjectOfType<WuzhongUIManager>();
+
+        if (uiManager == null)
+        {
+            GameObject uiObject = new GameObject("WuzhongUIManager");
+            uiManager = uiObject.AddComponent<WuzhongUIManager>();
+        }
     }
 
     private void FindTarget()
@@ -75,6 +65,7 @@ public class PlayerInteractor : MonoBehaviour
         {
             IInteractable candidate = hit.GetComponentInParent<IInteractable>();
             if (candidate == null) continue;
+
             float distance = Vector2.Distance(center, hit.ClosestPoint(center));
             if (distance < nearestDistance)
             {
@@ -86,25 +77,16 @@ public class PlayerInteractor : MonoBehaviour
 
     private void UpdatePrompt()
     {
-        if (promptText == null) return;
+        if (uiManager == null) return;
         bool canInteract = currentTarget != null;
-        SetPromptVisible(canInteract);
-        if (canInteract) promptText.text = $"[{keyLabel}] {currentTarget.InteractionPrompt}";
+        string message = canInteract ? $"[{keyLabel}] {currentTarget.InteractionPrompt}" : string.Empty;
+        uiManager.SetInteractionPrompt(canInteract, message);
     }
 
-    private void SetPromptVisible(bool visible)
+    private void OnDisable()
     {
-        if (promptCanvas != null && promptCanvas.gameObject.activeSelf != visible)
-            promptCanvas.gameObject.SetActive(visible);
-
-        if (promptText != null && promptText.gameObject.activeSelf != visible)
-            promptText.gameObject.SetActive(visible);
-
-        if (promptBackground != null && promptBackground.gameObject.activeSelf != visible)
-            promptBackground.gameObject.SetActive(visible);
+        if (uiManager != null) uiManager.SetInteractionPrompt(false);
     }
-
-    private void OnDisable() => SetPromptVisible(false);
 
     private void OnDrawGizmosSelected()
     {
