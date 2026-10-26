@@ -1,25 +1,64 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
-/// 检测主角附近的可交互物体，显示提示，并在按下 E 时触发交互。
+/// 《雾钟》交互系统：检测主角附近的可交互物体，
+/// 并在主角头顶显示可配置的交互提示。
 /// </summary>
+[DisallowMultipleComponent]
 public class PlayerInteractor : MonoBehaviour
 {
     [Header("检测设置")]
     [SerializeField] private Transform interactPoint;
-    [SerializeField, Min(0.1f)] private float interactRadius = 1.2f;
+    [SerializeField, Min(0.1f)] private float interactRadius = 0.5f;
     [SerializeField] private LayerMask interactableLayers = ~0;
 
-    [Header("交互提示")]
+    [Header("提示界面")]
+    [SerializeField] private Canvas promptCanvas;
     [SerializeField] private TMP_Text promptText;
+    [SerializeField] private Image backgroundImage;
+
+    [Header("字体设置")]
+    [Tooltip("将中文像素字体生成的 TMP Font Asset 拖到这里。")]
+    [SerializeField] private TMP_FontAsset pixelFont;
+    [SerializeField, Min(8f)] private float fontSize = 24f;
+    [SerializeField] private Color fontColor = new Color(1f, 0.93f, 0.80f, 1f);
     [SerializeField] private string keyLabel = "E";
+    [SerializeField] private Color keyColor = new Color(0.85f, 0.70f, 0.41f, 1f);
+
+    [Header("背景设置")]
+    [Tooltip("Alpha 控制背景不透明度；0 为透明，1 为完全不透明。")]
+    [SerializeField] private Color backgroundColor = new Color(0f, 0f, 0f, 0.78f);
+
+    [Header("头顶位置")]
+    [SerializeField] private Vector3 promptLocalOffset = new Vector3(0f, 1.5f, 0f);
 
     private IInteractable currentTarget;
 
+    /// <summary>
+    /// 由编辑器配置工具调用，绑定创建好的提示界面。
+    /// </summary>
+    public void ConfigurePrompt(Canvas canvas, TMP_Text text, Image background)
+    {
+        promptCanvas = canvas;
+        promptText = text;
+        backgroundImage = background;
+        ApplyStyle();
+        SetPromptVisible(false);
+    }
+
     private void Awake()
     {
+        ApplyStyle();
         SetPromptVisible(false);
+    }
+
+    private void LateUpdate()
+    {
+        // Canvas 是主角的子物体，因此使用本地坐标固定在头顶。
+        if (promptCanvas != null && promptCanvas.transform.parent == transform)
+            promptCanvas.transform.localPosition = promptLocalOffset;
     }
 
     private void Update()
@@ -34,16 +73,24 @@ public class PlayerInteractor : MonoBehaviour
     private void FindTarget()
     {
         currentTarget = null;
-        Vector2 center = interactPoint != null ? (Vector2)interactPoint.position : (Vector2)transform.position;
-        Collider2D[] hits = interactableLayers.value == 0
-            ? Physics2D.OverlapCircleAll(center, interactRadius)
-            : Physics2D.OverlapCircleAll(center, interactRadius, interactableLayers);
+
+        Vector2 center = interactPoint != null
+            ? (Vector2)interactPoint.position
+            : (Vector2)transform.position;
+
+        Collider2D[] hits = Physics2D.OverlapCircleAll(
+            center,
+            interactRadius,
+            interactableLayers
+        );
 
         float nearestDistance = float.MaxValue;
+
         foreach (Collider2D hit in hits)
         {
             IInteractable candidate = hit.GetComponentInParent<IInteractable>();
-            if (candidate == null) continue;
+            if (candidate == null)
+                continue;
 
             float distance = Vector2.Distance(center, hit.ClosestPoint(center));
             if (distance < nearestDistance)
@@ -56,20 +103,52 @@ public class PlayerInteractor : MonoBehaviour
 
     private void UpdatePrompt()
     {
-        if (promptText == null) return;
+        if (promptCanvas == null || promptText == null)
+            return;
+
         bool canInteract = currentTarget != null;
         SetPromptVisible(canInteract);
+
         if (canInteract)
-            promptText.text = $"[{keyLabel}] {currentTarget.InteractionPrompt}";
+        {
+            // 只把按键标记染成金色，提示文字保留米白色。
+            promptText.text =
+                $"<color=#{ColorUtility.ToHtmlStringRGB(keyColor)}>[{keyLabel}]</color> " +
+                $"{currentTarget.InteractionPrompt}";
+        }
+    }
+
+    private void ApplyStyle()
+    {
+        if (promptText != null)
+        {
+            if (pixelFont != null)
+                promptText.font = pixelFont;
+
+            promptText.fontSize = fontSize;
+            promptText.color = fontColor;
+            promptText.alignment = TextAlignmentOptions.Center;
+            promptText.enableWordWrapping = false;
+            promptText.raycastTarget = false;
+        }
+
+        if (backgroundImage != null)
+        {
+            backgroundImage.color = backgroundColor;
+            backgroundImage.raycastTarget = false;
+        }
     }
 
     private void SetPromptVisible(bool visible)
     {
-        if (promptText != null)
-            promptText.gameObject.SetActive(visible);
+        if (promptCanvas != null && promptCanvas.gameObject.activeSelf != visible)
+            promptCanvas.gameObject.SetActive(visible);
     }
 
-    private void OnDisable() => SetPromptVisible(false);
+    private void OnDisable()
+    {
+        SetPromptVisible(false);
+    }
 
     private void OnDrawGizmosSelected()
     {
