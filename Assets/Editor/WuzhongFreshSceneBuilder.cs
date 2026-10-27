@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Tilemaps;
 using System.IO;
 
 /// <summary>
@@ -22,6 +23,7 @@ public static class WuzhongFreshSceneBuilder
 
         EnsureFolder("Assets", "WuzhongGenerated");
         EnsureFolder(Root, "Textures");
+        EnsureFolder(Root, "Tiles");
         EnsureFolder("Assets", "Scenes");
 
         Sprite ground = MakeSprite("Ground", new Color32(45, 65, 58, 255));
@@ -35,21 +37,33 @@ public static class WuzhongFreshSceneBuilder
 
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         var root = new GameObject("WuzhongVillage");
-        var groundRoot = new GameObject("Ground - Base");
-        groundRoot.transform.SetParent(root.transform);
+        // Tilemap-based ground and paths, editable through Unity Tile Palette.
+        Grid grid = new GameObject("Village Grid").AddComponent<Grid>();
+        grid.transform.SetParent(root.transform, false);
+        grid.cellSize = Vector3.one;
+        Tile groundTile = CreateTileAsset("Ground_Tile", ground);
+        Tile roadTile = CreateTileAsset("StoneRoad_Tile", road);
+        Tile roadAltTile = CreateTileAsset("StoneRoadAlt_Tile", roadAlt);
+        Tilemap groundMap = CreateTilemap(grid.transform, "Ground Tilemap", -10);
+        Tilemap pathMap = CreateTilemap(grid.transform, "Road Tilemap", -5);
+
         for (int x = -12; x <= 12; x++)
         for (int y = -9; y <= 9; y++)
-            Place("Ground", ground, new Vector3(x, y, 5), groundRoot.transform, 0.98f, 0.98f, -10);
+            groundMap.SetTile(new Vector3Int(x, y, 0), groundTile);
 
-        var roadRoot = new GameObject("Stone Paths");
-        roadRoot.transform.SetParent(root.transform);
         for (int x = -12; x <= 12; x++)
         {
-            Place("Main Road", ((x % 2) == 0 ? road : roadAlt), new Vector3(x, -1, 3), roadRoot.transform, 0.98f, 0.98f, -5);
-            Place("North Path", road, new Vector3(x, 4, 3), roadRoot.transform, 0.98f, 0.98f, -5);
+            pathMap.SetTile(new Vector3Int(x, -1, 0), (x % 2 == 0) ? roadTile : roadAltTile);
+            pathMap.SetTile(new Vector3Int(x, 4, 0), (x % 3 == 0) ? roadAltTile : roadTile);
         }
         for (int y = -8; y <= 8; y++)
-            Place("Cross Path", road, new Vector3(1, y, 3), roadRoot.transform, 0.98f, 0.98f, -5);
+            pathMap.SetTile(new Vector3Int(1, y, 0), (y % 4 == 0) ? roadAltTile : roadTile);
+        for (int x = -8; x <= -4; x++)
+            pathMap.SetTile(new Vector3Int(x, 0, 0), roadTile);
+        for (int x = 4; x <= 8; x++)
+            pathMap.SetTile(new Vector3Int(x, 2, 0), roadTile);
+        for (int y = -5; y <= -3; y++)
+            pathMap.SetTile(new Vector3Int(-4, y, 0), roadTile);
 
         BuildHouse(root.transform, "Abandoned Old House", new Vector3(-7, 3, 0), wall, roof, 4.2f, 3.0f);
         BuildHouse(root.transform, "Ancestral Hall", new Vector3(6, 5, 0), wall, roof, 5.2f, 3.5f);
@@ -93,7 +107,7 @@ public static class WuzhongFreshSceneBuilder
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Selection.activeGameObject = player;
-        EditorUtility.DisplayDialog("Wu Zhong", "Fresh village scene created at " + ScenePath + "\nOpen it and press Play. This is a new scene; your previous files were not deleted.", "OK");
+        EditorUtility.DisplayDialog("Wu Zhong", "Village scene created at " + ScenePath + "\nGround and roads are editable Tilemaps. Reusable Tile assets are in Assets/WuzhongGenerated/Tiles. Open Window > 2D > Tile Palette to paint details.", "OK");
     }
 
     private static void BuildHouse(Transform parent, string name, Vector3 pos, Sprite wall, Sprite roof, float width, float height)
@@ -104,6 +118,35 @@ public static class WuzhongFreshSceneBuilder
         Place("Wall", wall, pos + new Vector3(0, 0, 0), house.transform, width, height, 5);
         Place("Roof", roof, pos + new Vector3(0, height * 0.48f, -0.1f), house.transform, width + 0.65f, height * 0.42f, 8);
         Place("Door", MakeSprite("DoorPlaceholder", new Color32(35, 27, 27, 255)), pos + new Vector3(0, -height * 0.2f, -0.2f), house.transform, 0.7f, 1.15f, 10);
+    }
+
+    private static Tilemap CreateTilemap(Transform grid, string name, int sortingOrder)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(grid, false);
+        var tilemap = go.AddComponent<Tilemap>();
+        var renderer = go.AddComponent<TilemapRenderer>();
+        renderer.sortingOrder = sortingOrder;
+        renderer.mode = TilemapRenderer.Mode.Chunk;
+        return tilemap;
+    }
+
+    private static Tile CreateTileAsset(string name, Sprite sprite)
+    {
+        string path = Root + "/Tiles/" + name + ".asset";
+        Tile tile = AssetDatabase.LoadAssetAtPath<Tile>(path);
+        if (tile == null)
+        {
+            tile = ScriptableObject.CreateInstance<Tile>();
+            tile.sprite = sprite;
+            AssetDatabase.CreateAsset(tile, path);
+        }
+        else
+        {
+            tile.sprite = sprite;
+            EditorUtility.SetDirty(tile);
+        }
+        return tile;
     }
 
     private static GameObject Place(string name, Sprite sprite, Vector3 position, Transform parent, float sx, float sy, int order)
