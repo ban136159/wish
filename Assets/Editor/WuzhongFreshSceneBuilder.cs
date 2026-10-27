@@ -88,6 +88,7 @@ public static class WuzhongFreshSceneBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(player.transform, false);
         sr.transform.SetParent(visual.transform, false);
+        sr.gameObject.AddComponent<WuzhongYSort>();
 
         var fogRoot = new GameObject("Atmosphere - Fog");
         fogRoot.transform.SetParent(root.transform);
@@ -115,7 +116,8 @@ public static class WuzhongFreshSceneBuilder
         var house = new GameObject(name);
         house.transform.SetParent(parent);
         house.transform.position = pos;
-        Place("Wall", wall, pos + new Vector3(0, 0, 0), house.transform, width, height, 5);
+        GameObject wallObject = Place("Wall", wall, pos + new Vector3(0, 0, 0), house.transform, width, height, 5);
+        wallObject.AddComponent<WuzhongYSort>();
         Place("Roof", roof, pos + new Vector3(0, height * 0.48f, -0.1f), house.transform, width + 0.65f, height * 0.42f, 8);
         Place("Door", MakeSprite("DoorPlaceholder", new Color32(35, 27, 27, 255)), pos + new Vector3(0, -height * 0.2f, -0.2f), house.transform, 0.7f, 1.15f, 10);
     }
@@ -207,5 +209,29 @@ public class WuzhongSimpleFollow : MonoBehaviour
         if (target == null) return;
         Vector3 desired = new Vector3(target.position.x, target.position.y, -10);
         transform.position = Vector3.Lerp(transform.position, desired, 8f * Time.deltaTime);
+    }
+}
+
+
+/// <summary>
+/// Simple top-down depth sorting. Objects lower on screen render in front of objects higher on screen.
+/// Attach to a SpriteRenderer object; house roofs can keep a fixed higher order if desired.
+/// </summary>
+[RequireComponent(typeof(SpriteRenderer))]
+public class WuzhongYSort : MonoBehaviour
+{
+    [SerializeField] private int orderOffset;
+    private SpriteRenderer spriteRenderer;
+
+    private void Awake()
+    {
+        spriteRenderer = GetComponent<SpriteRenderer>();
+    }
+
+    private void LateUpdate()
+    {
+        if (spriteRenderer == null) spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null) return;
+        spriteRenderer.sortingOrder = Mathf.RoundToInt(-transform.position.y * 100f) + orderOffset;
     }
 }
