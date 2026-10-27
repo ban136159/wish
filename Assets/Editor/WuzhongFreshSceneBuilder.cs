@@ -116,10 +116,18 @@ public static class WuzhongFreshSceneBuilder
         var house = new GameObject(name);
         house.transform.SetParent(parent);
         house.transform.position = pos;
-        GameObject wallObject = Place("Wall", wall, pos + new Vector3(0, 0, 0), house.transform, width, height, 5);
+        // All house parts participate in Y sorting. The roof is higher on screen,
+        // so it naturally renders behind the player when the player walks in front.
+        GameObject wallObject = Place("Wall", wall, pos, house.transform, width, height, 0);
         wallObject.AddComponent<WuzhongYSort>();
-        Place("Roof", roof, pos + new Vector3(0, height * 0.48f, -0.1f), house.transform, width + 0.65f, height * 0.42f, 8);
-        Place("Door", MakeSprite("DoorPlaceholder", new Color32(35, 27, 27, 255)), pos + new Vector3(0, -height * 0.2f, -0.2f), house.transform, 0.7f, 1.15f, 10);
+
+        GameObject roofObject = Place("Roof", roof, pos + new Vector3(0, height * 0.48f, -0.1f),
+            house.transform, width + 0.65f, height * 0.42f, 0);
+        roofObject.AddComponent<WuzhongYSort>();
+
+        GameObject doorObject = Place("Door", MakeSprite("DoorPlaceholder", new Color32(35, 27, 27, 255)),
+            pos + new Vector3(0, -height * 0.2f, -0.2f), house.transform, 0.7f, 1.15f, 0);
+        doorObject.AddComponent<WuzhongYSort>();
     }
 
     private static Tilemap CreateTilemap(Transform grid, string name, int sortingOrder)
