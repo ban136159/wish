@@ -25,7 +25,6 @@ public static class WuzhongFreshSceneBuilder
         EnsureFolder("Assets", "Scenes");
 
         Sprite ground = MakeSprite("Ground", new Color32(45, 65, 58, 255));
-        Sprite grass = MakeSprite("Grass", new Color32(55, 78, 66, 255));
         Sprite road = MakeSprite("StoneRoad", new Color32(93, 91, 79, 255));
         Sprite roadAlt = MakeSprite("StoneRoadAlt", new Color32(105, 101, 87, 255));
         Sprite wall = MakeSprite("OldHouseWall", new Color32(65, 51, 47, 255));
@@ -70,7 +69,8 @@ public static class WuzhongFreshSceneBuilder
         player.AddComponent<Rigidbody2D>().gravityScale = 0;
         var collider = player.AddComponent<CapsuleCollider2D>();
         collider.size = new Vector2(0.55f, 0.7f);
-        player.tag = "Untagged";
+        player.tag = "Player";
+        player.AddComponent<PlayerController>();
         var visual = new GameObject("Visual");
         visual.transform.SetParent(player.transform, false);
         sr.transform.SetParent(visual.transform, false);
