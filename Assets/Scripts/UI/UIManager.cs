@@ -28,6 +28,10 @@ public class UIManager : MonoBehaviour
 
     public void ShowInteractionPrompt(string message)
     {
+        // 对话打开时不显示调查提示。
+        if (DialogueManager.Instance != null && DialogueManager.Instance.IsDialogueOpen)
+            return;
+
         if (interactionPromptPanel != null)
             interactionPromptPanel.SetActive(true);
 
