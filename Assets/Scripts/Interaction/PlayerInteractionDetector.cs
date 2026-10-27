@@ -2,6 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// 玩家交互检测器：检测附近最近的可交互物体，显示提示并处理 E 键。
+/// 对话期间暂停物体交互，避免同一次按键触发多个系统。
 /// </summary>
 public class PlayerInteractionDetector : MonoBehaviour
 {
@@ -13,6 +14,15 @@ public class PlayerInteractionDetector : MonoBehaviour
 
     private void Update()
     {
+        // 对话期间不检测交互目标，也不允许再次触发调查。
+        if (DialogueManager.Instance != null && DialogueManager.Instance.IsDialogueOpen)
+        {
+            if (UIManager.Instance != null)
+                UIManager.Instance.HideInteractionPrompt();
+
+            return;
+        }
+
         FindNearestInteractable();
 
         if (currentTarget != null && Input.GetKeyDown(KeyCode.E))
