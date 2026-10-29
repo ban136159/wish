@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 《雾钟》简易对话管理器。
-/// 在场景中创建一个 DialogueManager 对象，并在 Inspector 中绑定对话面板、文本和继续提示。
+/// 通过 WuzhongEvents 发布对话开始/结束通知，不要求 UI、音效等系统直接引用本类。
 /// </summary>
 public class DialogueManager : MonoBehaviour
 {
@@ -19,7 +19,7 @@ public class DialogueManager : MonoBehaviour
 
     [Header("显示设置")]
     [SerializeField, Min(0f)] private float characterDelay = 0.02f;
-    [SerializeField] private KeyCode continueKey = KeyCode.Escape;
+    [SerializeField] private KeyCode continueKey = KeyCode.E;
 
     private string[] currentLines;
     private int currentLineIndex;
@@ -44,12 +44,12 @@ public class DialogueManager : MonoBehaviour
 
     private void Update()
     {
-        if (!IsDialogueOpen || !Input.GetKeyDown(KeyCode.E))
+        if (!IsDialogueOpen || !Input.GetKeyDown(continueKey))
             return;
 
         if (isTyping)
         {
-            // 打字尚未结束时，按 E 立即显示完整句子。
+            // 打字尚未结束时，按继续键立即显示完整句子。
             if (typingCoroutine != null)
                 StopCoroutine(typingCoroutine);
 
@@ -78,7 +78,7 @@ public class DialogueManager : MonoBehaviour
             return;
         }
 
-        currentLines = lines;
+        currentLines = (string[])lines.Clone();
         currentLineIndex = 0;
         IsDialogueOpen = true;
         dialoguePanel.SetActive(true);
@@ -87,13 +87,16 @@ public class DialogueManager : MonoBehaviour
             speakerText.text = speaker;
 
         if (continueHintText != null)
-            continueHintText.text = "按 E 继续";
+            continueHintText.text = $"按 {continueKey} 继续";
 
         DisplayCurrentLine();
+        WuzhongEvents.RaiseDialogueStarted(speaker, (string[])currentLines.Clone());
     }
 
     public void CloseDialogue()
     {
+        bool wasOpen = IsDialogueOpen;
+
         if (typingCoroutine != null)
             StopCoroutine(typingCoroutine);
 
@@ -104,6 +107,10 @@ public class DialogueManager : MonoBehaviour
 
         if (dialoguePanel != null)
             dialoguePanel.SetActive(false);
+
+        // 只有真正打开过的对话才发布结束事件，避免重复通知。
+        if (wasOpen)
+            WuzhongEvents.RaiseDialogueEnded();
     }
 
     private void ShowNextLine()
@@ -153,6 +160,8 @@ public class DialogueManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        // 若物件在对话进行中被销毁，也要通知订阅者收尾。
+        CloseDialogue();
         if (Instance == this)
             Instance = null;
     }
