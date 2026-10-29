@@ -2,11 +2,11 @@ using UnityEngine;
 
 /// <summary>
 /// 《雾钟》事件监听示例。挂到场景中的任意 GameObject，Play 后在 Console 查看事件。
-/// 这是调试观察者；正式 UI/音效系统可用同样方式订阅事件。
+/// 继承 WuzhongEventObserver，统一管理订阅和取消订阅，避免重复监听或内存泄漏。
 /// </summary>
-public class WuzhongEventDebugObserver : MonoBehaviour
+public class WuzhongEventDebugObserver : WuzhongEventObserver
 {
-    private void OnEnable()
+    protected override void SubscribeEvents()
     {
         WuzhongEvents.InteractionTargetChanged += OnInteractionTargetChanged;
         WuzhongEvents.InteractionStarted += OnInteractionStarted;
@@ -17,7 +17,7 @@ public class WuzhongEventDebugObserver : MonoBehaviour
         WuzhongEvents.LoopDayChanged += OnLoopDayChanged;
     }
 
-    private void OnDisable()
+    protected override void UnsubscribeEvents()
     {
         WuzhongEvents.InteractionTargetChanged -= OnInteractionTargetChanged;
         WuzhongEvents.InteractionStarted -= OnInteractionStarted;
