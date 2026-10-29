@@ -62,14 +62,10 @@ public class DialogueManager : MonoBehaviour
         ShowNextLine();
     }
 
-    /// <summary>读取继续键，使用 Unity 内置旧输入接口，避免依赖未安装的 Input System 包。</summary>
+    /// <summary>读取继续键。该项目未引用 Input System 包，因此使用旧输入管理器。</summary>
     private bool ContinueKeyPressed()
     {
-#if ENABLE_LEGACY_INPUT_MANAGER
         return Input.GetKeyDown(continueKey);
-#else
-        return false;
-#endif
     }
     /// <summary>开始一段对话。speaker 可为空，lines 至少应包含一行。</summary>
     public void StartDialogue(string speaker, string[] lines)
