@@ -3,8 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 《雾钟》交互系统：检测主角附近的可交互物体，
-/// 并在主角头顶显示可配置的交互提示。
+/// 《雾钟》交互系统：检测主角附近的可交互物体，并发布目标变化/交互事件。
 /// </summary>
 [DisallowMultipleComponent]
 public class PlayerInteractor : MonoBehaviour
@@ -36,9 +35,6 @@ public class PlayerInteractor : MonoBehaviour
 
     private IInteractable currentTarget;
 
-    /// <summary>
-    /// 由编辑器配置工具调用，绑定创建好的提示界面。
-    /// </summary>
     public void ConfigurePrompt(Canvas canvas, TMP_Text text, Image background)
     {
         promptCanvas = canvas;
@@ -56,14 +52,13 @@ public class PlayerInteractor : MonoBehaviour
 
     private void LateUpdate()
     {
-        // Canvas 是主角的子物体，因此使用本地坐标固定在头顶。
         if (promptCanvas != null && promptCanvas.transform.parent == transform)
             promptCanvas.transform.localPosition = promptLocalOffset;
     }
 
     private void Update()
     {
-        // 对话打开时，E 键由 DialogueManager 接管，避免重复触发建筑交互。
+        // 对话期间由 DialogueManager 接管继续键，不再检测交互。
         if (DialogueManager.Instance != null && DialogueManager.Instance.IsDialogueOpen)
         {
             SetPromptVisible(false);
@@ -74,23 +69,22 @@ public class PlayerInteractor : MonoBehaviour
         UpdatePrompt();
 
         if (currentTarget != null && Input.GetKeyDown(KeyCode.E))
+        {
+            WuzhongEvents.RaiseInteractionStarted(GetTargetId(currentTarget));
             currentTarget.Interact();
+        }
     }
 
     private void FindTarget()
     {
+        IInteractable previousTarget = currentTarget;
         currentTarget = null;
 
         Vector2 center = interactPoint != null
             ? (Vector2)interactPoint.position
             : (Vector2)transform.position;
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(
-            center,
-            interactRadius,
-            interactableLayers
-        );
-
+        Collider2D[] hits = Physics2D.OverlapCircleAll(center, interactRadius, interactableLayers);
         float nearestDistance = float.MaxValue;
 
         foreach (Collider2D hit in hits)
@@ -106,6 +100,20 @@ public class PlayerInteractor : MonoBehaviour
                 currentTarget = candidate;
             }
         }
+
+        if (!ReferenceEquals(previousTarget, currentTarget))
+        {
+            WuzhongEvents.RaiseInteractionTargetChanged(
+                currentTarget == null ? null : GetTargetId(currentTarget));
+        }
+    }
+
+    private static string GetTargetId(IInteractable target)
+    {
+        if (target is Component component)
+            return component.gameObject.name;
+
+        return target == null ? string.Empty : target.GetType().Name;
     }
 
     private void UpdatePrompt()
@@ -118,7 +126,6 @@ public class PlayerInteractor : MonoBehaviour
 
         if (canInteract)
         {
-            // 只把按键标记染成金色，提示文字保留米白色。
             promptText.text =
                 $"<color=#{ColorUtility.ToHtmlStringRGB(keyColor)}>[{keyLabel}]</color> " +
                 $"{currentTarget.InteractionPrompt}";
@@ -155,6 +162,11 @@ public class PlayerInteractor : MonoBehaviour
     private void OnDisable()
     {
         SetPromptVisible(false);
+        if (currentTarget != null)
+        {
+            currentTarget = null;
+            WuzhongEvents.RaiseInteractionTargetChanged(null);
+        }
     }
 
     private void OnDrawGizmosSelected()
