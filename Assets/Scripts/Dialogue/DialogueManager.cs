@@ -90,21 +90,6 @@ public class DialogueManager : MonoBehaviour
 #endif
         return false;
     }
-        if (isTyping)
-        {
-            // 打字尚未结束时，按继续键立即显示完整句子。
-            if (typingCoroutine != null)
-                StopCoroutine(typingCoroutine);
-
-            dialogueText.text = currentLines[currentLineIndex];
-            isTyping = false;
-            typingCoroutine = null;
-            return;
-        }
-
-        ShowNextLine();
-    }
-
     /// <summary>开始一段对话。speaker 可为空，lines 至少应包含一行。</summary>
     public void StartDialogue(string speaker, string[] lines)
     {
