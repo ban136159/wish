@@ -21,6 +21,7 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
     [Header("对话设置")]
     [SerializeField] private string speakerName = "旁白";
     [TextArea(2, 6)]
+    [SerializeField] private DialogueOutcome dialogueOutcome;
     [SerializeField] private string[] dialogueLines =
     {
         "门缝里透出一股潮湿的冷气。",
@@ -65,7 +66,11 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
         {
             case InteractionType.Dialogue:
                 if (DialogueManager.Instance != null)
+                {
+                    if (dialogueOutcome != null)
+                        dialogueOutcome.PrepareForNextDialogue();
                     DialogueManager.Instance.StartDialogue(speakerName, dialogueLines);
+                }
                 else
                 {
                     Debug.LogWarning("场景中没有 DialogueManager，先创建并配置对话管理器。", this);
