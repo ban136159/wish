@@ -1,9 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// 《雾钟》主角控制器：四方向移动、方向图片切换、待机呼吸、移动上下微动和 Y 轴显示排序。
-/// 角色图片直接放在 Player 根物体上也可以；脚本会自动创建 Visual 子物体来承载图片动画。
-/// 适用于 Unity 2022.3 及更新版本。此脚本不再要求或控制任何碰撞箱。
+/// 《雾钟》主角控制器：八方向移动、八方向独立图片、待机呼吸、移动微动和 Y 轴显示排序。
+/// 根物体负责 Rigidbody2D 移动；SpriteRenderer 可放在根物体或 Visual 子物体上。
+/// 不会自动创建或修改碰撞箱。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
@@ -12,11 +12,15 @@ public class PlayerController : MonoBehaviour
     [Header("移动设置")]
     [SerializeField, Min(0f)] private float moveSpeed = 3.5f;
 
-    [Header("四方向角色图片（可选）")]
+    [Header("八方向角色图片（可选）")]
     [SerializeField] private Sprite downSprite;
     [SerializeField] private Sprite upSprite;
     [SerializeField] private Sprite leftSprite;
     [SerializeField] private Sprite rightSprite;
+    [SerializeField] private Sprite downLeftSprite;
+    [SerializeField] private Sprite downRightSprite;
+    [SerializeField] private Sprite upLeftSprite;
+    [SerializeField] private Sprite upRightSprite;
 
     [Header("待机呼吸")]
     [Tooltip("待机时轻微缩放幅度。设为 0 可关闭。")]
@@ -24,9 +28,9 @@ public class PlayerController : MonoBehaviour
     [SerializeField, Min(0f)] private float idleBreathSpeed = 2.2f;
 
     [Header("移动上下微动")]
-    [Tooltip("每次上下摆动的高度（Unity 单位）。建议 0.04 到 0.10。设为 0 可关闭。")]
+    [Tooltip("每次上下摆动的高度（Unity 单位）。设为 0 可关闭。")]
     [SerializeField, Range(0f, 0.2f)] private float moveBobAmount = 0.08f;
-    [Tooltip("上下摆动速度。数值越大摆动越快。")]
+    [Tooltip("上下摆动速度。")]
     [SerializeField, Min(0f)] private float moveBobSpeed = 10f;
 
     private Rigidbody2D rb;
@@ -44,15 +48,12 @@ public class PlayerController : MonoBehaviour
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
 
-        // 先查找现有的视觉子物体。
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)
             spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 
         if (spriteRenderer != null && spriteRenderer.transform == transform)
         {
-            // 图片原本就在 Player 根物体上：自动建立 Visual 子物体，
-            // 将 SpriteRenderer 的显示属性复制过去，根物体仍只负责物理移动。
             SpriteRenderer source = spriteRenderer;
             GameObject visualObject = new GameObject("Visual");
             visualRoot = visualObject.transform;
@@ -96,6 +97,7 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        // 支持旧 Input Manager 的方向键与 WASD。
         moveInput = new Vector2(
             Input.GetAxisRaw("Horizontal"),
             Input.GetAxisRaw("Vertical")
@@ -103,11 +105,8 @@ public class PlayerController : MonoBehaviour
 
         if (moveInput.sqrMagnitude > 0.001f)
         {
-            if (Mathf.Abs(moveInput.x) > Mathf.Abs(moveInput.y))
-                lastFacing = moveInput.x < 0f ? Vector2.left : Vector2.right;
-            else
-                lastFacing = moveInput.y < 0f ? Vector2.down : Vector2.up;
-
+            // 保留斜向信息，供八方向图片选择使用。
+            lastFacing = moveInput;
             UpdateFacingSprite();
         }
     }
@@ -126,13 +125,12 @@ public class PlayerController : MonoBehaviour
         if (visualRoot == null || spriteRenderer == null)
             return;
 
-        // 不依赖碰撞箱，直接按 Player 根物体的世界 Y 坐标进行排序。
+        // 按角色根物体世界 Y 坐标排序，适用于俯视场景。
         spriteRenderer.sortingOrder = -Mathf.RoundToInt(transform.position.y * 100f);
 
         animationTime += Time.deltaTime;
         bool isMoving = moveInput.sqrMagnitude > 0.001f;
 
-        // 待机呼吸：轻微缩放。移动时仍保留少量呼吸效果。
         float breath = Mathf.Sin(animationTime * idleBreathSpeed) * idleBreathAmount;
         float scaleX = 1f + breath * (isMoving ? 0.35f : 1f);
         float scaleY = 1f - breath * 0.25f;
@@ -142,7 +140,6 @@ public class PlayerController : MonoBehaviour
             visualStartScale.z
         );
 
-        // 移动时上下弹动；停止时准确回到 Visual 的初始位置。
         float bob = isMoving
             ? Mathf.Abs(Mathf.Sin(animationTime * moveBobSpeed)) * moveBobAmount
             : 0f;
@@ -154,12 +151,26 @@ public class PlayerController : MonoBehaviour
         if (spriteRenderer == null)
             return;
 
-        Sprite targetSprite = null;
-        if (lastFacing == Vector2.down) targetSprite = downSprite;
-        else if (lastFacing == Vector2.up) targetSprite = upSprite;
-        else if (lastFacing == Vector2.left) targetSprite = leftSprite;
-        else if (lastFacing == Vector2.right) targetSprite = rightSprite;
+        Sprite targetSprite;
 
+        // 当 X、Y 都有输入时，使用对应的独立斜向图片。
+        if (Mathf.Abs(lastFacing.x) > 0.1f && Mathf.Abs(lastFacing.y) > 0.1f)
+        {
+            if (lastFacing.x < 0f)
+                targetSprite = lastFacing.y > 0f ? upLeftSprite : downLeftSprite;
+            else
+                targetSprite = lastFacing.y > 0f ? upRightSprite : downRightSprite;
+        }
+        else if (Mathf.Abs(lastFacing.y) > 0.1f)
+        {
+            targetSprite = lastFacing.y > 0f ? upSprite : downSprite;
+        }
+        else
+        {
+            targetSprite = lastFacing.x < 0f ? leftSprite : rightSprite;
+        }
+
+        // 对应方向未配置图片时，保留上一张有效图片，避免角色变空白。
         if (targetSprite != null)
             spriteRenderer.sprite = targetSprite;
     }
