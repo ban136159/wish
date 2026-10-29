@@ -2,9 +2,6 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-#if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem;
-#endif
 
 /// <summary>
 /// 《雾钟》简易对话管理器。
@@ -65,30 +62,14 @@ public class DialogueManager : MonoBehaviour
         ShowNextLine();
     }
 
-    /// <summary>
-    /// 同时兼容 Unity 新输入系统和旧输入管理器。
-    /// 项目设置为 Input System Package (New) 时，Input.GetKeyDown 不会正常读取按键。
-    /// </summary>
+    /// <summary>读取继续键，使用 Unity 内置旧输入接口，避免依赖未安装的 Input System 包。</summary>
     private bool ContinueKeyPressed()
     {
-#if ENABLE_INPUT_SYSTEM
-        if (Keyboard.current != null)
-        {
-            if (continueKey == KeyCode.Space && Keyboard.current.spaceKey.wasPressedThisFrame)
-                return true;
-            if (continueKey == KeyCode.Return && Keyboard.current.enterKey.wasPressedThisFrame)
-                return true;
-            if (continueKey == KeyCode.KeypadEnter && Keyboard.current.numpadEnterKey.wasPressedThisFrame)
-                return true;
-            if (continueKey == KeyCode.Escape && Keyboard.current.escapeKey.wasPressedThisFrame)
-                return true;
-        }
-#endif
 #if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(continueKey))
-            return true;
-#endif
+        return Input.GetKeyDown(continueKey);
+#else
         return false;
+#endif
     }
     /// <summary>开始一段对话。speaker 可为空，lines 至少应包含一行。</summary>
     public void StartDialogue(string speaker, string[] lines)
