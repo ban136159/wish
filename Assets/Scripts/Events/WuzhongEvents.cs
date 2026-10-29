@@ -13,6 +13,7 @@ public static class WuzhongEvents
     public static event Action DialogueEnded;
     public static event Action<string, string, string> ClueDiscovered;
     public static event Action<int> LoopDayChanged;
+    public static event Action<string, string, int> ItemAdded;
 
     public static void RaiseInteractionTargetChanged(string interactionId)
         => InteractionTargetChanged?.Invoke(interactionId);
@@ -35,6 +36,9 @@ public static class WuzhongEvents
     public static void RaiseLoopDayChanged(int day)
         => LoopDayChanged?.Invoke(day);
 
+    public static void RaiseItemAdded(string itemId, string displayName, int amount)
+        => ItemAdded?.Invoke(itemId, displayName, amount);
+
     /// <summary>仅在测试或明确的全局重置流程中调用；不要在普通场景切换时随意清空事件。</summary>
     public static void ResetAll()
     {
@@ -45,5 +49,6 @@ public static class WuzhongEvents
         DialogueEnded = null;
         ClueDiscovered = null;
         LoopDayChanged = null;
+        ItemAdded = null;
     }
 }
