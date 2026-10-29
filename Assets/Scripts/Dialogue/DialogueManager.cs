@@ -2,6 +2,9 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 /// <summary>
 /// 《雾钟》简易对话管理器。
@@ -44,9 +47,49 @@ public class DialogueManager : MonoBehaviour
 
     private void Update()
     {
-        if (!IsDialogueOpen || !Input.GetKeyDown(continueKey))
+        if (!IsDialogueOpen || !ContinueKeyPressed())
             return;
 
+        if (isTyping)
+        {
+            // 打字尚未结束时，按继续键立即显示完整句子。
+            if (typingCoroutine != null)
+                StopCoroutine(typingCoroutine);
+
+            dialogueText.text = currentLines[currentLineIndex];
+            isTyping = false;
+            typingCoroutine = null;
+            return;
+        }
+
+        ShowNextLine();
+    }
+
+    /// <summary>
+    /// 同时兼容 Unity 新输入系统和旧输入管理器。
+    /// 项目设置为 Input System Package (New) 时，Input.GetKeyDown 不会正常读取按键。
+    /// </summary>
+    private bool ContinueKeyPressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null)
+        {
+            if (continueKey == KeyCode.Space && Keyboard.current.spaceKey.wasPressedThisFrame)
+                return true;
+            if (continueKey == KeyCode.Return && Keyboard.current.enterKey.wasPressedThisFrame)
+                return true;
+            if (continueKey == KeyCode.KeypadEnter && Keyboard.current.numpadEnterKey.wasPressedThisFrame)
+                return true;
+            if (continueKey == KeyCode.Escape && Keyboard.current.escapeKey.wasPressedThisFrame)
+                return true;
+        }
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(continueKey))
+            return true;
+#endif
+        return false;
+    }
         if (isTyping)
         {
             // 打字尚未结束时，按继续键立即显示完整句子。
