@@ -19,7 +19,7 @@ public class DialogueManager : MonoBehaviour
 
     [Header("显示设置")]
     [SerializeField, Min(0f)] private float characterDelay = 0.02f;
-    [SerializeField] private KeyCode continueKey = KeyCode.E;
+    [SerializeField] private KeyCode continueKey = KeyCode.Space;
 
     private string[] currentLines;
     private int currentLineIndex;
@@ -87,7 +87,7 @@ public class DialogueManager : MonoBehaviour
             speakerText.text = speaker;
 
         if (continueHintText != null)
-            continueHintText.text = $"按 {continueKey} 继续";
+            continueHintText.text = continueKey == KeyCode.Space ? "按 空格 继续" : $"按 {continueKey} 继续";
 
         DisplayCurrentLine();
         WuzhongEvents.RaiseDialogueStarted(speaker, (string[])currentLines.Clone());
