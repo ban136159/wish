@@ -21,12 +21,18 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
     [Header("对话设置")]
     [SerializeField] private string speakerName = "旁白";
     [TextArea(2, 6)]
-    [SerializeField] private DialogueOutcome dialogueOutcome;
     [SerializeField] private string[] dialogueLines =
     {
         "门缝里透出一股潮湿的冷气。",
         "雾中似乎有人在低声呼唤。"
     };
+
+    [Header("对话结束选项")]
+    [Tooltip("全部对话播放完后显示的选项。留空时继续使用旧版 DialogueOutcome 单一结果。")]
+    [SerializeField] private DialogueChoice[] dialogueChoices = new DialogueChoice[0];
+
+    [Tooltip("兼容旧版单一结果设置；配置了上方对话选项时不会调用。")]
+    [SerializeField] private DialogueOutcome dialogueOutcome;
 
     [Header("开门设置")]
     [Tooltip("可选：需要开门时隐藏或显示的门对象。")]
@@ -67,9 +73,21 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
             case InteractionType.Dialogue:
                 if (DialogueManager.Instance != null)
                 {
-                    if (dialogueOutcome != null)
-                        dialogueOutcome.PrepareForNextDialogue();
-                    DialogueManager.Instance.StartDialogue(speakerName, dialogueLines);
+                    if (HasDialogueChoices())
+                    {
+                        DialogueManager.Instance.StartDialogue(
+                            speakerName,
+                            dialogueLines,
+                            dialogueChoices
+                        );
+                    }
+                    else
+                    {
+                        if (dialogueOutcome != null)
+                            dialogueOutcome.PrepareForNextDialogue();
+
+                        DialogueManager.Instance.StartDialogue(speakerName, dialogueLines);
+                    }
                 }
                 else
                 {
@@ -91,6 +109,18 @@ public class BuildingInteractable : MonoBehaviour, IInteractable
                 Debug.Log($"玩家{promptAction}：{buildingName}", this);
                 break;
         }
+    }
+
+    private bool HasDialogueChoices()
+    {
+        if (dialogueChoices == null || dialogueChoices.Length == 0)
+            return false;
+
+        foreach (DialogueChoice choice in dialogueChoices)
+            if (choice != null)
+                return true;
+
+        return false;
     }
 
     private void ApplyDoorState()

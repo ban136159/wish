@@ -1,11 +1,13 @@
 using System.Collections;
+using System.Text;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 《雾钟》简易对话管理器。
-/// 通过 WuzhongEvents 发布对话开始/结束通知，不要求 UI、音效等系统直接引用本类。
+/// 《雾钟》对话管理器。
+/// 支持逐字对话，以及对话结束后以方向键选择事件选项。
+/// 选项文字显示在现有 Dialogue Text 中，不需要额外建立按钮或 UI 物件。
 /// </summary>
 public class DialogueManager : MonoBehaviour
 {
@@ -21,12 +23,22 @@ public class DialogueManager : MonoBehaviour
     [SerializeField, Min(0f)] private float characterDelay = 0.02f;
     [SerializeField] private KeyCode continueKey = KeyCode.E;
 
+    [Header("选项操作")]
+    [SerializeField] private KeyCode previousChoiceKey = KeyCode.UpArrow;
+    [SerializeField] private KeyCode nextChoiceKey = KeyCode.DownArrow;
+    [SerializeField] private KeyCode confirmChoiceKey = KeyCode.Return;
+    [SerializeField] private KeyCode cancelChoiceKey = KeyCode.Escape;
+
     private string[] currentLines;
+    private DialogueChoice[] currentChoices;
     private int currentLineIndex;
+    private int selectedChoiceIndex;
     private Coroutine typingCoroutine;
     private bool isTyping;
+    private bool isChoosing;
 
     public bool IsDialogueOpen { get; private set; }
+    public bool IsChoosing => isChoosing;
 
     private void Awake()
     {
@@ -44,7 +56,16 @@ public class DialogueManager : MonoBehaviour
 
     private void Update()
     {
-        if (!IsDialogueOpen || !ContinueKeyPressed())
+        if (!IsDialogueOpen)
+            return;
+
+        if (isChoosing)
+        {
+            HandleChoiceInput();
+            return;
+        }
+
+        if (!ContinueKeyPressed())
             return;
 
         if (isTyping)
@@ -62,13 +83,20 @@ public class DialogueManager : MonoBehaviour
         ShowNextLine();
     }
 
-    /// <summary>读取继续键。该项目未引用 Input System 包，因此使用旧输入管理器。</summary>
+    /// <summary>读取对话继续键。项目目前使用旧 Input Manager。</summary>
     private bool ContinueKeyPressed()
     {
         return Input.GetKeyDown(continueKey);
     }
-    /// <summary>开始一段对话。speaker 可为空，lines 至少应包含一行。</summary>
+
+    /// <summary>兼容旧调用：只开始对话，不显示结束选项。</summary>
     public void StartDialogue(string speaker, string[] lines)
+    {
+        StartDialogue(speaker, lines, null);
+    }
+
+    /// <summary>开始对话，并在全部台词播放完后显示可选项。</summary>
+    public void StartDialogue(string speaker, string[] lines, DialogueChoice[] choices)
     {
         if (lines == null || lines.Length == 0)
         {
@@ -83,8 +111,14 @@ public class DialogueManager : MonoBehaviour
             return;
         }
 
+        if (IsDialogueOpen)
+            CloseDialogue();
+
         currentLines = (string[])lines.Clone();
+        currentChoices = HasChoices(choices) ? (DialogueChoice[])choices.Clone() : null;
         currentLineIndex = 0;
+        selectedChoiceIndex = 0;
+        isChoosing = false;
         IsDialogueOpen = true;
         dialoguePanel.SetActive(true);
 
@@ -98,6 +132,18 @@ public class DialogueManager : MonoBehaviour
         WuzhongEvents.RaiseDialogueStarted(speaker, (string[])currentLines.Clone());
     }
 
+    private static bool HasChoices(DialogueChoice[] choices)
+    {
+        if (choices == null || choices.Length == 0)
+            return false;
+
+        foreach (DialogueChoice choice in choices)
+            if (choice != null)
+                return true;
+
+        return false;
+    }
+
     public void CloseDialogue()
     {
         bool wasOpen = IsDialogueOpen;
@@ -107,8 +153,10 @@ public class DialogueManager : MonoBehaviour
 
         typingCoroutine = null;
         isTyping = false;
+        isChoosing = false;
         IsDialogueOpen = false;
         currentLines = null;
+        currentChoices = null;
 
         if (dialoguePanel != null)
             dialoguePanel.SetActive(false);
@@ -124,7 +172,11 @@ public class DialogueManager : MonoBehaviour
 
         if (currentLines == null || currentLineIndex >= currentLines.Length)
         {
-            CloseDialogue();
+            if (HasChoices(currentChoices))
+                BeginChoiceSelection();
+            else
+                CloseDialogue();
+
             return;
         }
 
@@ -163,9 +215,122 @@ public class DialogueManager : MonoBehaviour
         typingCoroutine = null;
     }
 
+    private void BeginChoiceSelection()
+    {
+        isChoosing = true;
+        selectedChoiceIndex = 0;
+        while (selectedChoiceIndex < currentChoices.Length &&
+               currentChoices[selectedChoiceIndex] == null)
+            selectedChoiceIndex++;
+
+        RenderChoices();
+
+        if (continueHintText != null)
+            continueHintText.text = "↑↓ 选择　Enter 确认　Esc 关闭";
+    }
+
+    private void HandleChoiceInput()
+    {
+        if (Input.GetKeyDown(cancelChoiceKey))
+        {
+            CloseDialogue();
+            return;
+        }
+
+        if (Input.GetKeyDown(previousChoiceKey) || Input.GetKeyDown(KeyCode.W))
+        {
+            MoveChoiceSelection(-1);
+            return;
+        }
+
+        if (Input.GetKeyDown(nextChoiceKey) || Input.GetKeyDown(KeyCode.S))
+        {
+            MoveChoiceSelection(1);
+            return;
+        }
+
+        if (Input.GetKeyDown(confirmChoiceKey) ||
+            Input.GetKeyDown(KeyCode.KeypadEnter) ||
+            Input.GetKeyDown(KeyCode.Space))
+        {
+            ConfirmSelectedChoice();
+        }
+    }
+
+    private void MoveChoiceSelection(int direction)
+    {
+        if (currentChoices == null || currentChoices.Length == 0)
+            return;
+
+        int validCount = 0;
+        foreach (DialogueChoice choice in currentChoices)
+            if (choice != null) validCount++;
+
+        if (validCount == 0)
+            return;
+
+        do
+        {
+            selectedChoiceIndex += direction;
+            if (selectedChoiceIndex < 0)
+                selectedChoiceIndex = currentChoices.Length - 1;
+            else if (selectedChoiceIndex >= currentChoices.Length)
+                selectedChoiceIndex = 0;
+        }
+        while (currentChoices[selectedChoiceIndex] == null);
+
+        RenderChoices();
+    }
+
+    private void RenderChoices()
+    {
+        if (dialogueText == null || currentChoices == null)
+            return;
+
+        StringBuilder output = new StringBuilder();
+        if (currentLines != null && currentLines.Length > 0)
+            output.Append(currentLines[currentLines.Length - 1]).AppendLine().AppendLine();
+
+        output.AppendLine("你要怎么做？");
+        for (int i = 0; i < currentChoices.Length; i++)
+        {
+            DialogueChoice choice = currentChoices[i];
+            if (choice == null)
+                continue;
+
+            output.Append(i == selectedChoiceIndex ? "▶ " : "　 ");
+            output.Append(i + 1).Append(". ").AppendLine(choice.Label);
+        }
+
+        dialogueText.text = output.ToString();
+    }
+
+    private void ConfirmSelectedChoice()
+    {
+        if (currentChoices == null ||
+            selectedChoiceIndex < 0 ||
+            selectedChoiceIndex >= currentChoices.Length)
+            return;
+
+        DialogueChoice selected = currentChoices[selectedChoiceIndex];
+        if (selected == null)
+            return;
+
+        if (!selected.CanExecute(out string reason))
+        {
+            if (!string.IsNullOrWhiteSpace(reason))
+                dialogueText.text = reason + "\n\n按方向键选择其他选项。";
+            return;
+        }
+
+        // 先关闭对话并发布 DialogueEnded，再执行场景切换或道具奖励。
+        // 这样旧的 DialogueOutcome 订阅者也能正常完成收尾。
+        CloseDialogue();
+        selected.Execute();
+    }
+
     private void OnDestroy()
     {
-        // 若物件在对话进行中被销毁，也要通知订阅者收尾。
         CloseDialogue();
         if (Instance == this)
             Instance = null;
